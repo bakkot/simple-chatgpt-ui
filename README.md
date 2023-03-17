@@ -18,7 +18,6 @@ Ensure you have a reasonably recent version of node installed. Then
 
 ```sh
 npm install
-npm run build
 node run.js
 ```
 
@@ -39,4 +38,5 @@ Happy chatting! And remember: _don't trust it_.
 - maybe let you customize [the other parameters](https://platform.openai.com/docs/api-reference/chat/create)
 - give you a tree view of the conversation so you can jump around
 - support up arrow to load old messages
+- stop button
 - error handling, I guess
