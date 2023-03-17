@@ -236,12 +236,11 @@ body {
         return;
       }
       message += text;
-      if (message === '' && text.trim() === '') {
-        // often starts with empty lines
+      if (message.trim() === '') {
         return;
       }
       let isAtBottom = (messagesEle.scrollHeight - messagesEle.scrollTop - messagesEle.clientHeight) < 1;
-      m2.textContent = message;
+      m2.textContent = message.trimStart();
       if (isAtBottom) {
         messagesEle.scrollTop = messagesEle.scrollHeight;
       }
