@@ -143,10 +143,10 @@ body {
   let inputEle = document.querySelector('.input');
   let sendButtonEle = document.querySelector('.send-button');
 
-  inputEle.addEventListener('input', () => {
-    // make the textbox expand
+  function fixupTextboxSize() {
     inputEle.parentNode.dataset.replicatedValue = inputEle.value;
-  });
+  }
+  inputEle.addEventListener('input', fixupTextboxSize);
 
   inputEle.addEventListener('keydown', e => {
     if (e.code === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -222,6 +222,7 @@ body {
   function botMessage(query) {
     let m1 = addMessage(true);
     m1.textContent = query;
+    fixupTextboxSize();
     let m2 = addMessage(false);
     m2.textContent = ' ';
     messagesEle.scrollTop = messagesEle.scrollHeight;
