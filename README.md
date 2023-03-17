@@ -2,6 +2,7 @@
 
 A two-file JS-based UI for interacting with ChatGPT in your browser. Requires you to supply your own API key.
 
+![screenshot](./screenshot.png)
 
 ## Why?
 
