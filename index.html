@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<title>ChatGPT</title>
+<style>
+:root {
+  --text-color: #404040;
+}
+html,
+body {
+    height: 100%;
+}
+body {
+  font-family: system,-apple-system,system-ui,BlinkMacSystemFont,sans-serif;
+  color: var(--text-color);
+  font-size: 1.2rem;
+  max-width: 60rem;
+  margin: 0 auto 0 auto;
+}
+.content {
+  margin-bottom: 3rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.messages {
+  margin-top: 3rem;
+  margin-bottom: 3rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow-y: scroll;
+}
+.messages > div:first-of-type {
+  border-top: 1px solid #aaa;
+}
+.user-message-container {
+  border-bottom: 1px solid #aaa;
+  position: relative;
+}
+.bot-message-container {
+  border-bottom: 1px solid #aaa;
+  position: relative;
+  background: #f7f7f7;
+}
+.name {
+  color: #777;
+  position: absolute;
+  right: 55rem;
+  top: 1rem; /* nb same as top margin on text */
+}
+.text {
+  max-width: 45rem;
+  margin: 1rem auto 1rem auto;
+  white-space: pre-wrap;
+}
+.input-container {
+  margin: 0 auto 2rem auto;
+  position: relative;
+}
+/* we need the wrapper because using padding on the textarea messes up the resizing */
+.input-wrapper {
+  border-radius: 5px;
+  padding: 0.8rem;
+  border: 1px solid #aaa;
+  box-shadow: 0px 0px 10px #aaa ;
+}
+.input {
+  border-radius: 5px;
+  border: none;
+  font-size: 1.2rem;
+  width: 32rem;
+}
+.input:focus {
+  outline: none;
+}
+.send-button-container {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0.3rem;
+  display: flex;
+  align-items: center;
+}
+.send-button {
+  background: inherit;
+  border: none;
+  font-size: 1.6rem;
+  border-radius: 5px;
+  line-height: 1; /* not perfect, but it helps align the envelope glyph */
+}
+.send-button:hover {
+  background: #ddd;
+}
+.send-button:active {
+  margin-top: 2px;
+}
+
+/* https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/ */
+.grow-wrap {
+  display: grid;
+}
+.grow-wrap::after {
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  visibility: hidden;
+}
+.grow-wrap > textarea {
+  resize: none;
+  overflow: hidden;
+}
+.grow-wrap > textarea,
+.grow-wrap::after {
+  padding: 0.5rem;
+  font: inherit;
+  grid-area: 1 / 1 / 2 / 2;
+}
+</style>
+<body>
+<div style="display: none">
+  <div class="user-message-container">
+    <div class="name">user</div>
+    <div class="text">content</div>
+  </div>
+  <div class="bot-message-container">
+    <div class="name">bot</div>
+    <div class="text">content<br>content</div>
+  </div>
+</div>
+<div class=content>
+  <div class="messages"></div>
+  <div class="input-container">
+    <div class="input-wrapper">
+      <div class="grow-wrap">
+        <textarea class="input" rows="1" autofocus></textarea>
+      </div>
+    </div>
+    <div class="send-button-container">
+      <button class="send-button">✉</button>
+    </div>
+  </div>
+</div>
+<script>
+  let baseUserEle = document.querySelector('.user-message-container');
+  let baseBotEle = document.querySelector('.bot-message-container');
+  let messagesEle = document.querySelector('.messages');
+  let inputEle = document.querySelector('.input');
+  let sendButtonEle = document.querySelector('.send-button');
+
+  inputEle.addEventListener('input', () => {
+    // make the textbox expand
+    inputEle.parentNode.dataset.replicatedValue = inputEle.value;
+  });
+
+  inputEle.addEventListener('keydown', e => {
+    if (e.code === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      submit();
+    }
+  });
+
+  sendButtonEle.addEventListener('click', submit);
+
+  function submit() {
+    let text = inputEle.value.trim();
+    inputEle.value = '';
+    botMessage(text);
+  }
+
+  function addMessage(user) {
+    let cloned = (user ? baseUserEle : baseBotEle).cloneNode(true);
+    let text = cloned.querySelector('.text');
+    messagesEle.append(cloned);
+    return text;
+  }
+
+  async function* wrapReader(reader) {
+    // someday, https://github.com/whatwg/streams/pull/980#issuecomment-1167194347
+    while (true) {
+      let { done, value } = await reader.read();
+      if (done) return;
+      yield value;
+    }
+  }
+
+  function splitLinesTransformStream() {
+    let buffer = '';
+    return new TransformStream({
+      transform(chunk, controller) {
+        let parts = (buffer + chunk).split('\n');
+        buffer = parts.pop();
+        for (let part of parts) {
+          controller.enqueue(part);
+        }
+      },
+      flush(controller) {
+        if (buffer.length > 0) {
+          controller.enqueue(buffer);
+        }
+      },
+    });
+  }
+
+  async function send(message, callback, err) {
+    try {
+      let res = await fetch('./api', { method: 'post', body: JSON.stringify(message), headers: { 'content-type': 'application/json' } });
+      let reader = res.body
+        .pipeThrough(new TextDecoderStream())
+        .pipeThrough(splitLinesTransformStream())
+        .getReader();
+      for await (let item of wrapReader(reader)) {
+        let v = JSON.parse(item);
+        if (v.delta?.content) {
+          callback(v.delta.content);
+        }
+      }
+      callback();
+    } catch (e) {
+      err(e);
+    }
+  }
+
+  let messages = [
+    { role: 'system', content: 'You are a helpful graduate-level tutor for any academic subject.' },
+  ];
+  function botMessage(query) {
+    let m1 = addMessage(true);
+    m1.textContent = query;
+    let m2 = addMessage(false);
+    m2.textContent = ' ';
+    messagesEle.scrollTop = messagesEle.scrollHeight;
+    let message = '';
+    let callback = text => {
+      if (text == null) {
+        // done
+        messages.push({
+          role: 'assistant',
+          content: message,
+        });
+        return;
+      }
+      message += text;
+      if (message === '' && text.trim() === '') {
+        // often starts with empty lines
+        return;
+      }
+      let isAtBottom = (messagesEle.scrollHeight - messagesEle.scrollTop - messagesEle.clientHeight) < 1;
+      m2.textContent = message;
+      if (isAtBottom) {
+        messagesEle.scrollTop = messagesEle.scrollHeight;
+      }
+    };
+    let err = e => {
+      console.error(e);
+      m2.style.color = 'red';
+      m2.textContent = e.message;
+    };
+
+    messages.push({
+      role: 'user',
+      content: query,
+    });
+    send({
+      messages,
+      max_tokens: 1000,
+    }, callback, err);
+  }
+</script>
