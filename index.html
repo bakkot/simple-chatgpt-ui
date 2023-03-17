@@ -258,8 +258,20 @@ body {
       role: 'user',
       content: query,
     });
+
+    let shortened = [];
+    let totalLength = 20;
+    for (let i = messages.length - 1; i >= 1; --i) {
+      let extra = 1.5 * messages[i].content.split(' ').length; // about 1.33 words per token; 1.5 to be generous
+      if (totalLength + extra > 4096) {
+        break;
+      }
+      totalLength += extra;
+      shortened.unshift(messages[i]);
+    }
+    shortened.unshift(messages[0]);
     send({
-      messages,
+      messages: shortened,
       max_tokens: 1000,
     }, callback, err);
   }
