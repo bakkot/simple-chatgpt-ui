@@ -137,6 +137,7 @@ body {
   </div>
 </div>
 <script>
+  const CONTEXT_WINDOW = 8192;
   let baseUserEle = document.querySelector('.user-message-container');
   let baseBotEle = document.querySelector('.bot-message-container');
   let messagesEle = document.querySelector('.messages');
@@ -261,7 +262,7 @@ body {
     let totalLength = 20;
     for (let i = messages.length - 1; i >= 1; --i) {
       let extra = 1.5 * messages[i].content.split(' ').length; // about 1.33 words per token; 1.5 to be generous
-      if (totalLength + extra > 4096) {
+      if (totalLength + extra > CONTEXT_WINDOW) {
         break;
       }
       totalLength += extra;
