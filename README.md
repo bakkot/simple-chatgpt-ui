@@ -8,7 +8,7 @@ A two-file JS-based UI for interacting with ChatGPT in your browser. Requires yo
 
 I wanted something simple I could play with. The [free ChatGPT demo](https://chat.openai.com/chat) is a nice UI, but it's not always available unless you get the $20 / month "ChatGPT Plus" plan. The API, [priced at](https://openai.com/pricing) $0.002 / 1K tokens, will let you generate millions of words for that $20, but it doesn't have the nice UI.
 
-Other people have already built similar things, such as [this](https://github.com/WongSaang/chatgpt-ui) or [this](https://github.com/cogentapps/chat-with-gpt). If you're looking for something more fully-featured, try one of those. The point of this project was to extremely simple, so that it's easy to modify.
+Other people have already built similar things, such as [this](https://github.com/WongSaang/chatgpt-ui) or [this](https://github.com/cogentapps/chat-with-gpt). If you're looking for something more fully-featured, try one of those. For a medium-complexity one, try [this](https://github.com/mckaywrigley/chatbot-ui-lite). The point of this project was to be extremely simple, so that it's easy to modify.
 
 
 ## Setup
