@@ -70,7 +70,7 @@ app.post('/api', async (req, res) => {
     } else {
       console.error('An error occurred during OpenAI request', error);
     }
-    throw error;
+    throw new Error('failed'); // suppress gross express stack
   }
 });
 
