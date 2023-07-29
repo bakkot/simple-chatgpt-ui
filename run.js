@@ -19,6 +19,10 @@ app.use(express.json());
 app.get('/', function (req, res) {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
+app.get('/tokenize-bundled.js', function (req, res) {
+  res.setHeader('content-type', 'text/javascript');
+  res.sendFile(path.join(__dirname, 'tokenize-bundled.js'));
+});
 app.post('/api', async (req, res) => {
   let { messages, max_tokens } = req.body;
   if (!Array.isArray(messages) || typeof max_tokens !== 'number') {
@@ -51,6 +55,7 @@ app.post('/api', async (req, res) => {
           return;
         }
         const parsed = JSON.parse(message);
+
         res.write(JSON.stringify(parsed.choices[0]) + '\n');
         console.log(parsed.choices[0]);
       }

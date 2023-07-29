@@ -88,6 +88,17 @@ body {
   margin-top: 2px;
 }
 
+.token-count {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1rem;
+  display: flex;
+  align-items: center;
+  color: #999;
+  transform: translateX(100%);
+}
+
 /* https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/ */
 .grow-wrap {
   display: grid;
@@ -134,8 +145,10 @@ body {
     <div class="send-button-container">
       <button class="send-button">✉</button>
     </div>
+    <div class="token-count">15/8192</div>
   </div>
 </div>
+<script src='./tokenize-bundled.js'></script>
 <script>
   const CONTEXT_WINDOW = 8192;
   let baseUserEle = document.querySelector('.user-message-container');
@@ -143,6 +156,11 @@ body {
   let messagesEle = document.querySelector('.messages');
   let inputEle = document.querySelector('.input');
   let sendButtonEle = document.querySelector('.send-button');
+  let tokenCountEle = document.querySelector('.token-count');
+
+  let messages = [
+    { role: 'system', content: 'You are a helpful, efficient assistant.' },
+  ];
 
   function fixupTextboxSize() {
     inputEle.parentNode.dataset.replicatedValue = inputEle.value;
@@ -156,7 +174,25 @@ body {
     }
   });
 
+  inputEle.addEventListener('input', () => {
+    let text = inputEle.value.trim();
+    updateCount(text);
+  });
+
   sendButtonEle.addEventListener('click', submit);
+
+  function updateCount(input = '') {
+    let newMessages = [...messages];
+    if (input !== '') {
+      newMessages.push({
+        role: 'user',
+        content: input,
+      });
+    }
+    let count = tiktoken.countTokens(newMessages);
+    tokenCountEle.textContent = count + '/' + CONTEXT_WINDOW;
+  }
+  updateCount();
 
   function submit() {
     let text = inputEle.value.trim();
@@ -217,9 +253,6 @@ body {
     }
   }
 
-  let messages = [
-    { role: 'system', content: 'You are a helpful, efficient assistant.' },
-  ];
   function botMessage(query) {
     let m1 = addMessage(true);
     m1.textContent = query;
@@ -235,6 +268,7 @@ body {
           role: 'assistant',
           content: message,
         });
+        updateCount();
         return;
       }
       message += text;

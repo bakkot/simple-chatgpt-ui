@@ -35,6 +35,10 @@ This will bring up a server at `http://localhost:21665`; point your browser ther
 
 Happy chatting! And remember: _don't trust it_.
 
+## Rebuilding
+
+This uses [js-tiktoken](https://www.npmjs.com/package/js-tiktoken) to get estimated token counts. I'm using esbuild to bundle it for use client-side. For convenience the resulting file is already committed to this repo, but you can regenerate it with `npm run build`.
+
 
 ## TODO
 
