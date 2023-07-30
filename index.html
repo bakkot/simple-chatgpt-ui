@@ -292,15 +292,11 @@ body {
       content: query,
     });
 
-    let shortened = [];
-    let totalLength = 20;
-    for (let i = messages.length - 1; i >= 1; --i) {
-      let extra = 1.5 * messages[i].content.split(' ').length; // about 1.33 words per token; 1.5 to be generous
-      if (totalLength + extra > CONTEXT_WINDOW) {
-        break;
-      }
-      totalLength += extra;
-      shortened.unshift(messages[i]);
+    let shortened = [...messages];
+    while (tiktoken.countTokens(shortened) > 0.9 * CONTEXT_WINDOW) {
+      // this will infinite loop if the system prompt is > 8192 tokens
+      // so, you know, don't do that
+      shortened.splice(1, 1);
     }
     shortened.unshift(messages[0]);
     send({
