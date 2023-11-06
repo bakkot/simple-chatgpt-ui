@@ -35,7 +35,7 @@ app.post('/api', async (req, res) => {
   try {
     const completion = await openai.createChatCompletion(
       {
-        model: 'gpt-4',
+        model: 'gpt-4-1106-preview',
         messages,
         max_tokens,
         stream: true,
@@ -54,7 +54,13 @@ app.post('/api', async (req, res) => {
           res.end();
           return;
         }
-        const parsed = JSON.parse(message);
+        let parsed;
+        try {
+          parsed = JSON.parse(message);
+        } catch (e) {
+          console.error('failed to parse message', message);
+          throw e;
+        }
 
         res.write(JSON.stringify(parsed.choices[0]) + '\n');
         console.log(parsed.choices[0]);
