@@ -3,16 +3,15 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 
 let PORT = 21665; // 'gpt' in base 36
 
 let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
 
-let configuration = new Configuration({
+let openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
-let openai = new OpenAIApi(configuration);
 
 let app = express();
 app.use(express.json());
@@ -30,42 +29,19 @@ app.post('/api', async (req, res) => {
   }
   // TODO save log to disk
 
-  // streaming per https://github.com/openai/openai-node/issues/18#issuecomment-1369996933
   res.setHeader('content-type', 'text/plain');
   try {
-    const completion = await openai.createChatCompletion(
-      {
-        model: 'gpt-4-1106-preview',
-        messages,
-        max_tokens,
-        stream: true,
-      },
-      { responseType: 'stream' },
-    );
-
-    completion.data.on('data', data => {
-      const lines = data
-        .toString()
-        .split('\n')
-        .filter(line => line.trim() !== '');
-      for (const line of lines) {
-        const message = line.replace(/^data: /, '');
-        if (message === '[DONE]') {
-          res.end();
-          return;
-        }
-        let parsed;
-        try {
-          parsed = JSON.parse(message);
-        } catch (e) {
-          console.error('failed to parse message', message);
-          throw e;
-        }
-
-        res.write(JSON.stringify(parsed.choices[0]) + '\n');
-        console.log(parsed.choices[0]);
-      }
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-4-1106-preview',
+      messages,
+      stream: true,
     });
+
+    for await (const chunk of stream) {
+      res.write(JSON.stringify(chunk.choices[0]) + '\n');
+      console.log(chunk.choices[0]);
+    }
+    res.end();
   } catch (error) {
     if (error.response?.status) {
       console.error(error.response.status, error.message);
