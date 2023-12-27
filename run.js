@@ -23,8 +23,8 @@ app.get('/tokenize-bundled.js', function (req, res) {
   res.sendFile(path.join(__dirname, 'tokenize-bundled.js'));
 });
 app.post('/api', async (req, res) => {
-  let { messages, max_tokens } = req.body;
-  if (!Array.isArray(messages) || typeof max_tokens !== 'number') {
+  let { messages } = req.body;
+  if (!Array.isArray(messages)) {
     throw new Error('bad request');
   }
   // TODO save log to disk

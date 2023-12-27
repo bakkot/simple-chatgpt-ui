@@ -150,7 +150,6 @@ body {
 </div>
 <script src='./tokenize-bundled.js'></script>
 <script>
-  const CONTEXT_WINDOW = 8192;
   let baseUserEle = document.querySelector('.user-message-container');
   let baseBotEle = document.querySelector('.bot-message-container');
   let messagesEle = document.querySelector('.messages');
@@ -190,7 +189,7 @@ body {
       });
     }
     let count = tiktoken.countTokens(newMessages);
-    tokenCountEle.textContent = count + '/' + CONTEXT_WINDOW;
+    tokenCountEle.textContent = count;
   }
   updateCount();
 
@@ -292,16 +291,8 @@ body {
       content: query,
     });
 
-    let shortened = [...messages];
-    while (tiktoken.countTokens(shortened) > 0.9 * CONTEXT_WINDOW) {
-      // this will infinite loop if the system prompt is > 8192 tokens
-      // so, you know, don't do that
-      shortened.splice(1, 1);
-    }
-    shortened.unshift(messages[0]);
     send({
-      messages: shortened,
-      max_tokens: 1000,
+      messages,
     }, callback, err);
   }
 </script>
