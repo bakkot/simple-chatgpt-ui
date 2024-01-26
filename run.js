@@ -9,6 +9,9 @@ let PORT = 21665; // 'gpt' in base 36
 
 let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
 
+let outdir = path.join(__dirname, 'outputs');
+fs.mkdirSync(outdir, { recursive: true });
+
 let openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
@@ -37,11 +40,21 @@ app.post('/api', async (req, res) => {
       stream: true,
     });
 
+    let mess = '';
     for await (const chunk of stream) {
-      res.write(JSON.stringify(chunk.choices[0]) + '\n');
-      console.log(chunk.choices[0]);
+      let tok = chunk.choices[0];
+      res.write(JSON.stringify(tok) + '\n');
+      if (tok.delta?.content != null) {
+        mess += tok.delta.content;
+      }
     }
+    messages.push({
+      role: 'assistant',
+      content: mess,
+    });
     res.end();
+    let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
+    fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify(messages), 'utf8');
   } catch (error) {
     if (error.response?.status) {
       console.error(error.response.status, error.message);
