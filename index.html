@@ -12,7 +12,6 @@ body {
   font-family: system,-apple-system,system-ui,BlinkMacSystemFont,sans-serif;
   color: var(--text-color);
   font-size: 1.2rem;
-  max-width: 60rem;
   margin: 0 auto 0 auto;
 }
 .content {
@@ -22,8 +21,12 @@ body {
   flex-direction: column;
 }
 .messages {
+  max-width: 60rem;
+  width: 100%;
   margin-top: 3rem;
   margin-bottom: 3rem;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
@@ -52,9 +55,16 @@ body {
   margin: 1rem auto 1rem auto;
   white-space: pre-wrap;
 }
+
+.bottom {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  margin-bottom: 2rem;
+}
 .input-container {
-  margin: 0 auto 2rem auto;
   position: relative;
+  display: flex;
+  align-items: center;
 }
 /* we need the wrapper because using padding on the textarea messes up the resizing */
 .input-wrapper {
@@ -89,14 +99,27 @@ body {
 }
 
 .token-count {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: -1rem;
   display: flex;
   align-items: center;
   color: #999;
-  transform: translateX(100%);
+  margin-left: 1rem;
+}
+
+.model-select {
+  color: #999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  font-size: .9rem;
+  margin-right: 1rem;
+}
+.model-select span {
+  text-align: right;
+}
+
+input[type=radio] {
+  accent-color: dimgrey;
 }
 
 /* https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/ */
@@ -136,7 +159,22 @@ body {
 </div>
 <div class=content>
   <div class="messages"></div>
-  <div class="input-container">
+  <div class="bottom">
+    <div class="model-select">
+      <span>
+      <label for="gpt4">GPT4 Turbo (3¢)</label>
+      <input type="radio" id="gpt4" name="model" value="gpt-4-turbo-preview" checked>
+      </span>
+      <span>
+      <label for="sonnet">Claude 3 Sonnet (1.5¢)</label>
+      <input type="radio" id="sonnet" name="model" value="claude-3-sonnet-20240229">
+      </span>
+      <span>
+      <label for="opus">Claude 3 Opus (7.5¢)</label>
+      <input type="radio" id="opus" name="model" value="claude-3-opus-20240229">
+      </span>
+    </div>
+    <div class="input-container">
     <div class="input-wrapper">
       <div class="grow-wrap">
         <textarea class="input" rows="1" autofocus></textarea>
@@ -145,9 +183,20 @@ body {
     <div class="send-button-container">
       <button class="send-button">✉</button>
     </div>
-    <div class="token-count">15/8192</div>
+  </div>
+  <div class="token-count">3</div>
   </div>
 </div>
+<script>
+  // loading the tokenizer is slow; do any UI-affecting stuff before it
+  let oldModel = localStorage.getItem('chatgpt-ui-model');
+  if (oldModel) {
+    let radio = document.querySelector(`input[value="${oldModel}"]`);
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+</script>
 <script src='./tokenize-bundled.js'></script>
 <script>
   let baseUserEle = document.querySelector('.user-message-container');
@@ -157,9 +206,8 @@ body {
   let sendButtonEle = document.querySelector('.send-button');
   let tokenCountEle = document.querySelector('.token-count');
 
-  let messages = [
-    { role: 'system', content: 'Answer the question as asked, as concisely as possible without losing meaning, with no disclaimers or equivocation except when absolutely necessary. No need to specify that you are an AI model; I know this.' },
-  ];
+  let systemPrompt = 'Answer the question as asked. Give concise responses to simple questions, but provide thorough responses to more complex and open-ended questions. Omit any disclaimers or equivocation except when absolutely necessary. No need to specify that you are an AI model; I know this.';
+  let messages = [];
 
   function fixupTextboxSize() {
     inputEle.parentNode.dataset.replicatedValue = inputEle.value;
@@ -241,10 +289,7 @@ body {
         .pipeThrough(splitLinesTransformStream())
         .getReader();
       for await (let item of wrapReader(reader)) {
-        let v = JSON.parse(item);
-        if (v.delta?.content) {
-          callback(v.delta.content);
-        }
+        callback(JSON.parse(item));
       }
       callback();
     } catch (e) {
@@ -253,6 +298,8 @@ body {
   }
 
   function botMessage(query) {
+    let model = document.querySelector('input[name="model"]:checked').value;
+    localStorage.setItem('chatgpt-ui-model', model);
     let m1 = addMessage(true);
     m1.textContent = query;
     fixupTextboxSize();
@@ -292,6 +339,8 @@ body {
     });
 
     send({
+      model,
+      systemPrompt,
       messages,
     }, callback, err);
   }

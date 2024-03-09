@@ -4,10 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const OpenAI = require('openai');
+const Anthropic = require('@anthropic-ai/sdk');
 
 let PORT = 21665; // 'gpt' in base 36
 
 let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
+let ANTHROPIC_API_KEY = fs.readFileSync(path.join(__dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
 
 let outdir = path.join(__dirname, 'outputs');
 fs.mkdirSync(outdir, { recursive: true });
@@ -15,6 +17,48 @@ fs.mkdirSync(outdir, { recursive: true });
 let openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
+
+let anthropic = new Anthropic({
+  apiKey: ANTHROPIC_API_KEY,
+});
+
+async function* openaiStream({ model, systemPrompt, messages }) {
+  const stream = await openai.chat.completions.create({
+    model,
+    messages: [{ role: 'system', content: systemPrompt}, ...messages],
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    let tok = chunk.choices[0];
+    if (tok.delta?.content != null) {
+      yield tok.delta.content;
+    }
+  }
+}
+
+async function* anthropicStream({ model, systemPrompt, messages }) {
+  const stream = anthropic.messages.stream({
+    model,
+    system: systemPrompt,
+    messages,
+    max_tokens: 4096,
+  });
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      yield event.delta.text;
+    }
+  }
+}
+
+let models = {
+  __proto__: null,
+  'gpt-4-turbo-preview': openaiStream,
+  'claude-3-opus-20240229': anthropicStream,
+  'claude-3-sonnet-20240229': anthropicStream,
+};
+
 
 let app = express();
 app.use(express.json());
@@ -26,27 +70,22 @@ app.get('/tokenize-bundled.js', function (req, res) {
   res.sendFile(path.join(__dirname, 'tokenize-bundled.js'));
 });
 app.post('/api', async (req, res) => {
-  let { messages } = req.body;
+  let { model, systemPrompt, messages } = req.body;
   if (!Array.isArray(messages)) {
     throw new Error('bad request');
   }
-  // TODO save log to disk
 
   res.setHeader('content-type', 'text/plain');
   try {
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages,
-      stream: true,
-    });
+    if (!(model in models)) {
+      throw new Error(`got unknown model ${model}`);
+    }
+    const stream = models[model]({ model, systemPrompt, messages });
 
     let mess = '';
     for await (const chunk of stream) {
-      let tok = chunk.choices[0];
-      res.write(JSON.stringify(tok) + '\n');
-      if (tok.delta?.content != null) {
-        mess += tok.delta.content;
-      }
+      res.write(JSON.stringify(chunk) + '\n');
+      mess += chunk;
     }
     messages.push({
       role: 'assistant',
@@ -54,7 +93,7 @@ app.post('/api', async (req, res) => {
     });
     res.end();
     let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
-    fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify(messages), 'utf8');
+    fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify({ model, systemPrompt, messages }), 'utf8');
   } catch (error) {
     if (error.response?.status) {
       console.error(error.response.status, error.message);
@@ -65,10 +104,10 @@ app.post('/api', async (req, res) => {
         } catch {
           // ignored
         }
-        console.error('An error occurred during OpenAI request: ', message);
+        console.error('An error occurred during upstream request: ', message);
       });
     } else {
-      console.error('An error occurred during OpenAI request', error);
+      console.error('An error occurred during upstream request', error);
     }
     throw new Error('failed'); // suppress gross express stack
   }

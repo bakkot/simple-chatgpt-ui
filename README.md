@@ -1,6 +1,6 @@
 # simple-chatgpt-ui
 
-A two-file JS-based UI for interacting with ChatGPT in your browser. Requires you to supply your own API key.
+A two-file JS-based UI for interacting with ChatGPT and/or Claude in your browser. Requires you to supply your own API key(s).
 
 ![screenshot](./screenshot.png)
 
@@ -14,6 +14,7 @@ The point of this project was to be extremely simple, so that it's easy to modif
 
 Other people have already built similar things with more features. Here's some I've seen (but cannot vouch for):
 
+- [bettergpt.chat](https://bettergpt.chat/)
 - [chatbot-ui](https://github.com/mckaywrigley/chatbot-ui)
 - [chatgpt-ui](https://github.com/WongSaang/chatgpt-ui)
 - [chatbot-ui-lite](https://github.com/mckaywrigley/chatbot-ui-lite)
@@ -23,6 +24,10 @@ Other people have already built similar things with more features. Here's some I
 ## Setup
 
 Get an API key from OpenAI and put it in `OPENAI_KEY.txt`.
+
+Get an API key from Anthropic and put it in `ANTHROPIC_KEY.txt`.
+
+(If you only have one or the other, that's fine, just don't select the radio buttons to talk to one you don't have.)
 
 Ensure you have a reasonably recent version of node installed. Then
 
@@ -42,13 +47,12 @@ This uses [js-tiktoken](https://www.npmjs.com/package/js-tiktoken) to get estima
 
 ## TODO
 
-- save conversations to disk
-  - support loading old conversations by drag-and-drop'ing them onto the window
-  - including deleted messages
-- let you change the "system" prompt (currently hardcoded to "You are a helpful graduate-level tutor for any academic subject.").
-  - store old prompts in localstorage, default to most recent
+- support loading old conversations by drag-and-drop'ing them onto the window
+- including deleted messages
+- let you change the "system" prompt
+- store old prompts in localstorage, default to most recent
 - let you delete messages
-- let you reroll the most recent message
+- let you reroll the most recent message (clear it from UI and put your message in the chatbox)
 - maybe let you customize [the other parameters](https://platform.openai.com/docs/api-reference/chat/create)
 - give you a tree view of the conversation so you can jump around
 - support up arrow to load old messages
