@@ -329,8 +329,11 @@ input[type=radio] {
     };
     let err = e => {
       console.error(e);
-      m2.style.color = 'red';
-      m2.textContent = e.message;
+      let err = document.createElement('div');
+      err.style.color = 'red';
+      err.textContent = e.message + '\nThe immediately preceding message has been cleared from memory; you can try sending it again.';
+      m2.append(err);
+      messages.pop();
     };
 
     messages.push({
