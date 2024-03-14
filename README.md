@@ -1,6 +1,6 @@
 # simple-chatgpt-ui
 
-A two-file JS-based UI for interacting with ChatGPT and/or Claude in your browser. Requires you to supply your own API key(s).
+A two-file JS-based UI for interacting with ChatGPT and/or Claude and/or Gemini in your browser. Requires you to supply your own API key(s).
 
 ![screenshot](./screenshot.png)
 
@@ -27,7 +27,9 @@ Get an API key from OpenAI and put it in `OPENAI_KEY.txt`.
 
 Get an API key from Anthropic and put it in `ANTHROPIC_KEY.txt`.
 
-(If you only have one or the other, that's fine, just don't select the radio buttons to talk to one you don't have.)
+Get an API key from [Google AI](https://ai.google.dev/) and put it in `GOOGLE_KEY.txt`.
+
+(If you only have one of these, that's fine, just don't select the radio buttons to talk to ones you don't have.)
 
 Ensure you have a reasonably recent version of node installed. Then
 

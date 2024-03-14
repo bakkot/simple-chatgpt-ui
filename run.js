@@ -5,11 +5,13 @@ const path = require('path');
 const express = require('express');
 const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 let PORT = 21665; // 'gpt' in base 36
 
 let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
 let ANTHROPIC_API_KEY = fs.readFileSync(path.join(__dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
+let GOOGLE_API_KEY = fs.readFileSync(path.join(__dirname, 'GOOGLE_KEY.txt'), 'utf8').trim();
 
 let outdir = path.join(__dirname, 'outputs');
 fs.mkdirSync(outdir, { recursive: true });
@@ -21,6 +23,10 @@ let openai = new OpenAI({
 let anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
 });
+
+let google = (new GoogleGenerativeAI(GOOGLE_API_KEY))
+  .getGenerativeModel({ model: "gemini-pro"});
+
 
 async function* openaiStream({ model, systemPrompt, messages }) {
   const stream = await openai.chat.completions.create({
@@ -52,9 +58,25 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
   }
 }
 
+async function* googleStream({ model, systemPrompt, messages }) {
+  // gemini does not support system prompts
+  messages = [...messages];
+  let last = messages.pop().content;
+  const chat = google.startChat({ history: messages.map(({ role, content }) => ({
+    role: role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: content }],
+  }))});
+  let result = await chat.sendMessageStream(last);
+  for await (const chunk of result.stream) {
+    yield chunk.text();
+  }
+}
+
+
 let models = {
   __proto__: null,
   'gpt-4-turbo-preview': openaiStream,
+  'gemini-pro': googleStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-sonnet-20240229': anthropicStream,
 };
