@@ -76,6 +76,7 @@ async function* googleStream({ model, systemPrompt, messages }) {
 let models = {
   __proto__: null,
   'gpt-4-turbo': openaiStream,
+  'gpt-4o': openaiStream,
   'gemini-pro': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
