@@ -78,6 +78,8 @@ let models = {
   'gpt-4-turbo': openaiStream,
   'gpt-4o': openaiStream,
   'gemini-pro': googleStream,
+  'gemini-1.5-pro-latest': googleStream,
+  'gemini-1.5-flash-latest': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-sonnet-20240229': anthropicStream,
