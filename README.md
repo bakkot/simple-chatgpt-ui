@@ -31,6 +31,8 @@ Get an API key from [Google AI](https://ai.google.dev/) and put it in `GOOGLE_KE
 
 (If you only have one of these, that's fine, just don't select the radio buttons to talk to ones you don't have.)
 
+Put a list of usernames to allow in `ALLOWED_USERS.txt`, one per line. This is not intended as a security feature, just something to help keep track of where usage is going.
+
 Ensure you have a reasonably recent version of node installed. Then
 
 ```sh

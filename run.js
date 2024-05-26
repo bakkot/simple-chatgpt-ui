@@ -13,6 +13,8 @@ let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'ut
 let ANTHROPIC_API_KEY = fs.readFileSync(path.join(__dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
 let GOOGLE_API_KEY = fs.readFileSync(path.join(__dirname, 'GOOGLE_KEY.txt'), 'utf8').trim();
 
+let ALLOWED_USERS = fs.readFileSync(path.join(__dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
+
 let outdir = path.join(__dirname, 'outputs');
 fs.mkdirSync(outdir, { recursive: true });
 
@@ -95,17 +97,34 @@ app.get('/tokenize-bundled.js', function (req, res) {
   res.setHeader('content-type', 'text/javascript');
   res.sendFile(path.join(__dirname, 'tokenize-bundled.js'));
 });
+app.post('/check-user', (req, res) => {
+  let { user } = req.body;
+  if (ALLOWED_USERS.includes(user)) {
+    res.send('ok');
+  } else {
+    res.send('fail');
+  }
+});
 app.post('/api', async (req, res) => {
-  let { model, systemPrompt, messages } = req.body;
+  let { user, model, systemPrompt, messages } = req.body;
+  if (!ALLOWED_USERS.includes(user)) {
+    res.status(403);
+    res.send('unknown user');
+    return;
+  }
   if (!Array.isArray(messages)) {
-    throw new Error('bad request');
+    res.status(400);
+    res.send('bad request');
+    return;
+  }
+  if (!(model in models)) {
+    res.status(400);
+    res.send(`got unknown model ${model}`);
+    return;
   }
 
   res.setHeader('content-type', 'text/plain');
   try {
-    if (!(model in models)) {
-      throw new Error(`got unknown model ${model}`);
-    }
     const stream = models[model]({ model, systemPrompt, messages });
 
     let mess = '';
@@ -119,7 +138,7 @@ app.post('/api', async (req, res) => {
     });
     res.end();
     let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
-    fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify({ model, systemPrompt, messages }), 'utf8');
+    fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify({ user, model, systemPrompt, messages }), 'utf8');
   } catch (error) {
     if (error.response?.status) {
       console.error(error.response.status, error.message);

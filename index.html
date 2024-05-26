@@ -145,6 +145,19 @@ input[type=radio] {
   font-size: 1.2rem;
   grid-area: 1 / 1 / 2 / 2;
 }
+
+dialog {
+  max-width: 60rem;
+  outline: none;
+  border-radius: 5px;
+  box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px;
+}
+
+#user-confirm-box {
+  font-size: 1.2rem;
+  float: right;
+}
+
 </style>
 <body>
 <div style="display: none">
@@ -199,6 +212,19 @@ input[type=radio] {
   <div class="token-count">3</div>
   </div>
 </div>
+
+<dialog class="user">
+  Enter the username you were given:<br>
+  <input autofocus class="user-input" size=56 style="font-size:1.2rem"></input><br><br>
+  <span id="user-status"></span>
+  <span id="user-confirm-box">
+    <label for="save-user">remember me</label>
+    <input type="checkbox" id="save-user" checked></input>
+    &nbsp;
+    <input type="button" value="confirm" id="user-confirm"></input>
+  </span>
+</dialog>
+
 <script>
   // loading the tokenizer is slow; do any UI-affecting stuff before it
   let oldModel = localStorage.getItem('chatgpt-ui-model');
@@ -207,6 +233,79 @@ input[type=radio] {
     if (radio) {
       radio.checked = true;
     }
+  }
+
+  // get user
+  let user;
+  let userDialog = document.querySelector('.user');
+  let userStatus = document.querySelector('#user-status');
+
+  let userInput = userDialog.querySelector('.user-input');
+
+  async function isUserGood(user) {
+    try {
+      let res = await fetch('check-user', { method: 'post', body: JSON.stringify({ user }), headers: { 'content-type': 'application/json' } });
+      if (!res.ok) {
+        return { good: false, error: 'network request failed' };
+      }
+      res = await res.text();
+      if (res === 'ok') {
+        return { good: true, error: null };
+      } else if (res === 'fail') {
+        return { good: false, error: 'unrecognized user' };
+      } else {
+        return { good: false, error: 'unknown error' };
+      }
+    } catch (e) {
+      return { good: false, error: 'network request failed' };
+    }
+  }
+
+  async function confirmUser() {
+    let attemptedUser = userInput.value.trim();
+    userStatus.style.color = 'initial';
+    userStatus.innerText = 'checking...';
+
+    let { good, error } = await isUserGood(attemptedUser);
+    if (good) {
+      user = attemptedUser;
+      userStatus.innerText = 'ok!';
+      if (document.querySelector('#save-user').checked) {
+        localStorage.setItem('chatgpt-ui-user', user);
+      }
+      setTimeout(() => userDialog.close(), 500);
+    } else {
+      userStatus.style.color = 'red';
+      userStatus.innerText = error;
+    }
+  }
+
+  userInput.addEventListener('keydown', e => {
+    if (e.code === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      confirmUser();
+    }
+  });
+
+  userDialog.querySelector('#user-confirm')
+    .addEventListener('click', confirmUser);
+
+  userDialog.addEventListener('cancel', e => {
+      e.preventDefault();
+  });
+
+  let savedUser = localStorage.getItem('chatgpt-ui-user');
+  if (savedUser != null) {
+    (async () => {
+      let { good } = await isUserGood(savedUser);
+      if (good) {
+        user = savedUser;
+      } else {
+        userDialog.showModal();
+      }
+    })();
+  } else {
+    userDialog.showModal();
   }
 </script>
 <script src='./tokenize-bundled.js'></script>
@@ -296,6 +395,9 @@ input[type=radio] {
   async function send(message, callback, err) {
     try {
       let res = await fetch('./api', { method: 'post', body: JSON.stringify(message), headers: { 'content-type': 'application/json' } });
+      if (!res.ok) {
+        throw new Error('Error: ' + await res.text());
+      }
       let reader = res.body
         .pipeThrough(new TextDecoderStream())
         .pipeThrough(splitLinesTransformStream())
@@ -341,6 +443,9 @@ input[type=radio] {
     };
     let err = e => {
       console.error(e);
+      if (m2.textContent === ' ') {
+        m2.textContent = '';
+      }
       let err = document.createElement('div');
       err.style.color = 'red';
       err.textContent = e.message + '\nThe immediately preceding message has been cleared from memory; you can try sending it again.';
@@ -354,6 +459,7 @@ input[type=radio] {
     });
 
     send({
+      user,
       model,
       systemPrompt,
       messages,
