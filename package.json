@@ -4,11 +4,11 @@
     "build": "esbuild --bundle --format=iife --global-name=tiktoken tokenize.js > tokenize-bundled.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.17.1",
-    "@google/generative-ai": "^0.11.3",
+    "@anthropic-ai/sdk": "^0.25.0",
+    "@google/generative-ai": "^0.16.0",
     "esbuild": "^0.18.17",
     "express": "^4.18.2",
     "js-tiktoken": "^1.0.7",
-    "openai": "^4.16.2"
+    "openai": "^4.54.0"
   }
 }

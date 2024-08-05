@@ -26,8 +26,7 @@ let anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
 });
 
-let google = (new GoogleGenerativeAI(GOOGLE_API_KEY))
-  .getGenerativeModel({ model: "gemini-pro"});
+let google = (new GoogleGenerativeAI(GOOGLE_API_KEY));
 
 
 async function* openaiStream({ model, systemPrompt, messages }) {
@@ -61,10 +60,12 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
 }
 
 async function* googleStream({ model, systemPrompt, messages }) {
+  let mgr = google.getGenerativeModel({ model });
+
   // gemini does not support system prompts
   messages = [...messages];
   let last = messages.pop().content;
-  const chat = google.startChat({ history: messages.map(({ role, content }) => ({
+  const chat = mgr.startChat({ history: messages.map(({ role, content }) => ({
     role: role === 'assistant' ? 'model' : 'user',
     parts: [{ text: content }],
   }))});
@@ -78,6 +79,7 @@ async function* googleStream({ model, systemPrompt, messages }) {
 let models = {
   __proto__: null,
   'gpt-4-turbo': openaiStream,
+  'gpt-4o-mini': openaiStream,
   'gpt-4o': openaiStream,
   'gemini-pro': googleStream,
   'gemini-1.5-pro-latest': googleStream,
