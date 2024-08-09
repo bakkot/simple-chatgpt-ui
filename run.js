@@ -29,10 +29,46 @@ let anthropic = new Anthropic({
 let google = (new GoogleGenerativeAI(GOOGLE_API_KEY));
 
 
+let _fail = e => { throw new Error(e); };
+
+function anthropicToOpenAIContent(content) {
+  return typeof content === 'string'
+    ? { type: 'text', text: content }
+    : content.type === 'text'
+    ? content
+    : content.type === 'image' && content.source.type === 'base64'
+    ? {
+      type: 'image_url',
+      image_url: {
+        url: 'data:' + content.source.media_type + ';base64,' + content.source.data,
+      }
+    }
+    : _fail('unknown message ' + JSON.stringify(content));
+}
+
+function anthropicToOpenAI(messages) {
+  return messages.map(m => ({
+    role: m.role,
+    content: Array.isArray(m.content) ? m.content.map(anthropicToOpenAIContent) : anthropicToOpenAIContent(m.content)
+  }));
+}
+
+function anthropicToGemini(messages) {
+  return messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts:
+      Array.isArray(m.content)
+        ? m.content.length === 1 && m.content[0].type === 'text'
+          ? [{ text: m.content[0].text }]
+          : _fail('message is too complicated for google ' + JSON.stringify(m))
+        : [{ text: m.content }],
+  }));
+}
+
 async function* openaiStream({ model, systemPrompt, messages }) {
   const stream = await openai.chat.completions.create({
     model,
-    messages: [{ role: 'system', content: systemPrompt}, ...messages],
+    messages: [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAI(messages)],
     stream: true,
   });
 
@@ -63,12 +99,10 @@ async function* googleStream({ model, systemPrompt, messages }) {
   let mgr = google.getGenerativeModel({ model });
 
   // gemini does not support system prompts
-  messages = [...messages];
-  let last = messages.pop().content;
-  const chat = mgr.startChat({ history: messages.map(({ role, content }) => ({
-    role: role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: content }],
-  }))});
+
+  messages = anthropicToGemini(messages);
+  let last = messages.pop().parts[0].text;
+  const chat = mgr.startChat({ history: messages });
   let result = await chat.sendMessageStream(last);
   for await (const chunk of result.stream) {
     yield chunk.text();
@@ -92,7 +126,7 @@ let models = {
 
 
 let app = express();
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.get('/', function (req, res) {
   res.sendFile(path.join(__dirname, 'index.html'));
 });

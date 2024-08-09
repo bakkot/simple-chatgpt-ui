@@ -55,11 +55,28 @@ body {
   margin: 1rem auto 1rem auto;
   white-space: pre-wrap;
 }
+.link {
+  text-decoration: underline;
+  cursor: pointer;
+}
+img {
+  max-width: 100%;
+}
 
 .bottom {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   margin-bottom: 2rem;
+}
+.center-inputs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.attach-image-container {
+  color: #999;
+  padding-bottom: .4em;
 }
 .input-container {
   position: relative;
@@ -106,13 +123,15 @@ body {
 }
 
 .model-select {
-  color: #999;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  font-size: .9rem;
   margin-right: 1rem;
+}
+.small-text {
+  color: #999;
+  font-size: .9rem;
 }
 .model-select span {
   text-align: right;
@@ -173,7 +192,7 @@ dialog {
 <div class=content>
   <div class="messages"></div>
   <div class="bottom">
-    <div class="model-select">
+    <div class="model-select small-text">
       <span>
       <label for="gpt-4o-mini">GPT4o-mini (0.1¢)</label>
       <input type="radio" id="gpt-4o-mini" name="model" value="gpt-4o-mini">
@@ -203,17 +222,23 @@ dialog {
       <input type="radio" id="gemini-1.5-pro-latest" name="model" value="gemini-1.5-pro-latest">
       </span>
     </div>
-    <div class="input-container">
-    <div class="input-wrapper">
-      <div class="grow-wrap">
-        <textarea class="input" rows="1" autofocus></textarea>
+    <div class="center-inputs">
+      <div class="attach-image-container">
+        <span id="attach-container"><span class="link" id="attach">attach image</span> (ex. gemini)</span>
+        <span id="unattach" class="link" style="display:none">unattach</span>
+      </div>
+      <div class="input-container">
+        <div class="input-wrapper">
+          <div class="grow-wrap">
+            <textarea class="input" rows="1" autofocus></textarea>
+          </div>
+        </div>
+        <div class="send-button-container">
+          <button class="send-button">✉</button>
+        </div>
       </div>
     </div>
-    <div class="send-button-container">
-      <button class="send-button">✉</button>
-    </div>
-  </div>
-  <div class="token-count">3</div>
+  <div class="token-count"></div>
   </div>
 </div>
 
@@ -228,6 +253,8 @@ dialog {
     <input type="button" value="confirm" id="user-confirm"></input>
   </span>
 </dialog>
+
+<input type="file" id="imageInput" accept="image/*" style="display:none">
 
 <script>
   // loading the tokenizer is slow; do any UI-affecting stuff before it
@@ -312,7 +339,7 @@ dialog {
     userDialog.showModal();
   }
 </script>
-<script src='./tokenize-bundled.js'></script>
+<!-- <script src='./tokenize-bundled.js'></script> -->
 <script>
   let baseUserEle = document.querySelector('.user-message-container');
   let baseBotEle = document.querySelector('.bot-message-container');
@@ -320,6 +347,7 @@ dialog {
   let inputEle = document.querySelector('.input');
   let sendButtonEle = document.querySelector('.send-button');
   let tokenCountEle = document.querySelector('.token-count');
+  let imageInput = document.querySelector('#imageInput');
 
   let systemPrompt = 'Answer the question as asked. Give concise responses to simple questions, but provide thorough responses to more complex and open-ended questions. Omit any disclaimers or equivocation except when absolutely necessary. No need to specify that you are an AI model; I know this.';
   let messages = [];
@@ -343,22 +371,54 @@ dialog {
 
   sendButtonEle.addEventListener('click', submit);
 
-  function updateCount(input = '') {
-    let newMessages = [...messages];
-    if (input !== '') {
-      newMessages.push({
-        role: 'user',
-        content: input,
-      });
+
+  let attachContainer = document.querySelector('#attach-container');
+  let unattachContainer = document.querySelector('#unattach');
+  document.querySelector('#attach').addEventListener('click', () => {
+    imageInput.click();
+  });
+
+  let img = null;
+  imageInput.addEventListener('change', event => {
+    let file = event.target.files[0];
+    if (file) {
+      let reader = new FileReader();
+
+      reader.onload = e => {
+        img = e.target.result;
+        attachContainer.style.display = 'none';
+        unattachContainer.style.display = '';
+      };
+
+      // we're just not going to worry about races here
+      reader.readAsDataURL(file);
     }
-    let count = tiktoken.countTokens(newMessages);
-    tokenCountEle.textContent = count;
+  });
+
+  function unattach() {
+    img = null;
+    attachContainer.style.display = '';
+    unattachContainer.style.display = 'none';
+  }
+  unattachContainer.addEventListener('click', unattach);
+
+
+  function updateCount(input = '') {
+    // TODO fix this
+    // let newMessages = [...messages];
+    // if (input !== '') {
+    //   newMessages.push({
+    //     role: 'user',
+    //     content: input,
+    //   });
+    // }
+    // let count = tiktoken.countTokens(newMessages);
+    // tokenCountEle.textContent = count;
   }
   updateCount();
 
   function submit() {
     let text = inputEle.value.trim();
-    inputEle.value = '';
     botMessage(text);
   }
 
@@ -417,9 +477,21 @@ dialog {
 
   function botMessage(query) {
     let model = document.querySelector('input[name="model"]:checked').value;
+    if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) && model.includes('gemini')) {
+      alert("gemini doesn't support image inputs, sorry");
+      return;
+    }
+
+    inputEle.value = '';
     localStorage.setItem('chatgpt-ui-model', model);
     let m1 = addMessage(true);
     m1.textContent = query;
+    if (img) {
+      let imgEle = document.createElement('img');
+      imgEle.src = img;
+      m1.append(imgEle);
+    }
+
     fixupTextboxSize();
     let m2 = addMessage(false);
     m2.textContent = ' ';
@@ -430,7 +502,7 @@ dialog {
         // done
         messages.push({
           role: 'assistant',
-          content: message,
+          content: [{ type: 'text', text: message }],
         });
         updateCount();
         return;
@@ -457,9 +529,25 @@ dialog {
       messages.pop();
     };
 
+    let content = [
+      { type: 'text', text: query },
+    ];
+    if (img) {
+      let { type, base64 } = img.match(/^data:(?<type>[^;]+);base64,(?<base64>.*)/).groups;
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: type,
+          data: base64,
+        }
+      });
+      unattach();
+    }
+
     messages.push({
       role: 'user',
-      content: query,
+      content,
     });
 
     send({
