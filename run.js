@@ -80,6 +80,14 @@ async function* openaiStream({ model, systemPrompt, messages }) {
   }
 }
 
+async function openaiO1({ model, messages }) {
+  const response = await openai.chat.completions.create({
+    model,
+    messages,
+  });
+  return response.choices[0].message.content;
+}
+
 async function* anthropicStream({ model, systemPrompt, messages }) {
   const stream = anthropic.messages.stream({
     model,
@@ -115,6 +123,8 @@ let models = {
   'gpt-4-turbo': openaiStream,
   'gpt-4o-mini': openaiStream,
   'gpt-4o': openaiStream,
+  'o1-mini': openaiO1,
+  'o1-preview': openaiO1,
   'gemini-pro': googleStream,
   'gemini-1.5-pro-latest': googleStream,
   'gemini-1.5-flash-latest': googleStream,
@@ -122,6 +132,12 @@ let models = {
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-sonnet-20240229': anthropicStream,
   'claude-3-5-sonnet-20240620': anthropicStream,
+};
+
+let nonStream = {
+  __proto__: null,
+  'o1-mini': true,
+  'o1-preview': true,
 };
 
 
@@ -162,18 +178,28 @@ app.post('/api', async (req, res) => {
 
   res.setHeader('content-type', 'text/plain');
   try {
-    const stream = models[model]({ model, systemPrompt, messages });
+    if (model in nonStream) {
+      const message = await models[model]({ model, systemPrompt, messages });
+      res.write(JSON.stringify(message) + '\n');
+      messages.push({
+        role: 'assistant',
+        content: message,
+      });
+      res.end();
+    } else {
+      const stream = models[model]({ model, systemPrompt, messages });
 
-    let mess = '';
-    for await (const chunk of stream) {
-      res.write(JSON.stringify(chunk) + '\n');
-      mess += chunk;
+      let mess = '';
+      for await (const chunk of stream) {
+        res.write(JSON.stringify(chunk) + '\n');
+        mess += chunk;
+      }
+      messages.push({
+        role: 'assistant',
+        content: mess,
+      });
+      res.end();
     }
-    messages.push({
-      role: 'assistant',
-      content: mess,
-    });
-    res.end();
     let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
     fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify({ user, model, systemPrompt, messages }), 'utf8');
   } catch (error) {

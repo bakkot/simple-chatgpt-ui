@@ -136,6 +136,14 @@ img {
 .model-select span {
   text-align: right;
 }
+.span-rule {
+  width: 12em;
+  border-top: 1px solid grey;
+  height: 0;
+  margin-left: auto;
+  margin-top: .5em;
+  margin-bottom: .5em;
+}
 
 input[type=radio] {
   accent-color: dimgrey;
@@ -194,12 +202,12 @@ dialog {
   <div class="bottom">
     <div class="model-select small-text">
       <span>
-      <label for="gpt-4o-mini">GPT4o-mini (0.1¢)</label>
+      <label for="gpt-4o-mini">GPT-4o-mini (0.1¢)</label>
       <input type="radio" id="gpt-4o-mini" name="model" value="gpt-4o-mini">
       </span>
       <span>
-      <label for="gpt4">GPT4 Omni (1.5¢)</label>
-      <input type="radio" id="gpt4" name="model" value="gpt-4o" checked>
+      <label for="gpt-4o">GPT-4o (1¢)</label>
+      <input type="radio" id="gpt-4o" name="model" value="gpt-4o" checked>
       </span>
       <span>
       <label for="haiku">Claude 3 Haiku (0.1¢)</label>
@@ -221,10 +229,21 @@ dialog {
       <label for="gemini-1.5-pro-latest">Gemini 1.5 Pro (1¢)</label>
       <input type="radio" id="gemini-1.5-pro-latest" name="model" value="gemini-1.5-pro-latest">
       </span>
+      <span class="span-rule"></span>
+      <span>
+      <!-- pricing for o1 is tricky because of the reasoning steps -->
+      <!-- I am just naively multiplying prices by 10 here -->
+      <label for="o1-mini">o1-mini (12¢)</label>
+      <input type="radio" id="o1-mini" name="model" value="o1-mini">
+      </span>
+      <span>
+      <label for="o1-preview">o1-preview (60¢)</label>
+      <input type="radio" id="o1-preview" name="model" value="o1-preview">
+      </span>
     </div>
     <div class="center-inputs">
       <div class="attach-image-container">
-        <span id="attach-container"><span class="link" id="attach">attach image</span> (ex. gemini)</span>
+        <span id="attach-container"><span class="link" id="attach">attach image</span> (not gemini)</span>
         <span id="unattach" class="link" style="display:none">unattach</span>
       </div>
       <div class="input-container">
@@ -494,7 +513,7 @@ dialog {
 
     fixupTextboxSize();
     let m2 = addMessage(false);
-    m2.textContent = ' ';
+    m2.textContent = 'Thinking...';
     messagesEle.scrollTop = messagesEle.scrollHeight;
     let message = '';
     let callback = text => {
