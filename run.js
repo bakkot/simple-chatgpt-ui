@@ -130,8 +130,7 @@ let models = {
   'gemini-1.5-flash-latest': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
-  'claude-3-sonnet-20240229': anthropicStream,
-  'claude-3-5-sonnet-20240620': anthropicStream,
+  'claude-3-5-sonnet-latest': anthropicStream,
 };
 
 let nonStream = {
