@@ -66,9 +66,12 @@ function anthropicToGemini(messages) {
 }
 
 async function* openaiStream({ model, systemPrompt, messages }) {
+  const adjusted = model in o1
+    ? anthropicToOpenAI(messages)
+    : [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAI(messages)];
   const stream = await openai.chat.completions.create({
     model,
-    messages: [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAI(messages)],
+    messages: adjusted,
     stream: true,
   });
 
@@ -123,8 +126,8 @@ let models = {
   'gpt-4-turbo': openaiStream,
   'gpt-4o-mini': openaiStream,
   'gpt-4o': openaiStream,
-  'o1-mini': openaiO1,
-  'o1-preview': openaiO1,
+  'o1-mini': openaiStream,
+  'o1-preview': openaiStream,
   'gemini-pro': googleStream,
   'gemini-1.5-pro-latest': googleStream,
   'gemini-1.5-flash-latest': googleStream,
@@ -134,6 +137,13 @@ let models = {
 };
 
 let nonStream = {
+  __proto__: null,
+  // 'o1-mini': true,
+  // 'o1-preview': true,
+};
+
+// these don't support system messages
+let o1 = {
   __proto__: null,
   'o1-mini': true,
   'o1-preview': true,
