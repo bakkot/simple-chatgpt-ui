@@ -131,6 +131,7 @@ let models = {
   'gemini-pro': googleStream,
   'gemini-1.5-pro-latest': googleStream,
   'gemini-1.5-flash-latest': googleStream,
+  'gemini-2.0-flash-exp': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
