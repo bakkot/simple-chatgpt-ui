@@ -144,6 +144,7 @@ let nonStream = {
   __proto__: null,
   // 'o1-mini': true,
   // 'o1-preview': true,
+  'o1': true,
 };
 
 // these don't support system messages
@@ -194,7 +195,7 @@ app.post('/api', async (req, res) => {
   res.setHeader('content-type', 'text/plain');
   try {
     if (model in nonStream) {
-      const message = await models[model]({ model, systemPrompt, messages });
+      const message = await openaiO1({ model, messages });
       res.write(JSON.stringify(message) + '\n');
       messages.push({
         role: 'assistant',
