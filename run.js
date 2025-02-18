@@ -126,6 +126,7 @@ let models = {
   'gpt-4-turbo': openaiStream,
   'gpt-4o-mini': openaiStream,
   'gpt-4o': openaiStream,
+  'chatgpt-4o-latest': openaiStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
   'o1': openaiStream,
@@ -144,7 +145,7 @@ let nonStream = {
   __proto__: null,
   // 'o1-mini': true,
   // 'o1-preview': true,
-  'o1': true,
+  // 'o1': true,
 };
 
 // these don't support system messages
