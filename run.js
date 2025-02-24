@@ -139,6 +139,7 @@ let models = {
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
+  'claude-3-7-sonnet-latest': anthropicStream,
 };
 
 let nonStream = {
