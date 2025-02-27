@@ -126,6 +126,7 @@ let models = {
   'gpt-4-turbo': openaiStream,
   'gpt-4o-mini': openaiStream,
   'gpt-4o': openaiStream,
+  'gpt-4.5-preview': openaiStream,
   'chatgpt-4o-latest': openaiStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
