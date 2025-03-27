@@ -1,21 +1,19 @@
-'use strict';
-
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const OpenAI = require('openai');
-const Anthropic = require('@anthropic-ai/sdk');
-const { GoogleGenAI } = require('@google/genai');
+import fs from 'node:fs';
+import path from 'node:path';
+import express from 'express';
+import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 
 let PORT = 21665; // 'gpt' in base 36
 
-let OPENAI_API_KEY = fs.readFileSync(path.join(__dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
-let ANTHROPIC_API_KEY = fs.readFileSync(path.join(__dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
-let GOOGLE_API_KEY = fs.readFileSync(path.join(__dirname, 'GOOGLE_KEY.txt'), 'utf8').trim();
+let OPENAI_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
+let ANTHROPIC_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
+let GOOGLE_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'GOOGLE_KEY.txt'), 'utf8').trim();
 
-let ALLOWED_USERS = fs.readFileSync(path.join(__dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
+let ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
 
-let outdir = path.join(__dirname, 'outputs');
+let outdir = path.join(import.meta.dirname, 'outputs');
 fs.mkdirSync(outdir, { recursive: true });
 
 let openai = new OpenAI({
@@ -176,11 +174,11 @@ let nonSystem = {
 let app = express();
 app.use(express.json({ limit: '50mb' }));
 app.get('/', function (req, res) {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(import.meta.dirname, 'index.html'));
 });
 app.get('/tokenize-bundled.js', function (req, res) {
   res.setHeader('content-type', 'text/javascript');
-  res.sendFile(path.join(__dirname, 'tokenize-bundled.js'));
+  res.sendFile(path.join(import.meta.dirname, 'tokenize-bundled.js'));
 });
 app.post('/check-user', (req, res) => {
   let { user } = req.body;
