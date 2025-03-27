@@ -5,7 +5,7 @@ const path = require('path');
 const express = require('express');
 const OpenAI = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
 let PORT = 21665; // 'gpt' in base 36
 
@@ -29,7 +29,7 @@ let anthropic = new Anthropic({
   }
 });
 
-let google = (new GoogleGenerativeAI(GOOGLE_API_KEY));
+let google = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 
 
 let _fail = e => { throw new Error(e); };
@@ -122,20 +122,13 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
 }
 
 async function* googleStream({ model, systemPrompt, messages }) {
-  let mgr = google.getGenerativeModel({ model, systemInstruction: systemPrompt });
-
   messages = anthropicToGemini(messages);
-  let last = messages.pop().parts;
-  let chat = mgr.startChat({ history: messages });
-
-  if (typeof last[0].text !== 'string' || last[1] && !last[1].inlineData || last.length > 2) {
-    console.dir(messages, { depth: Infinity });
-    throw new Error('confused message format for gemini');
-  }
-
-  let result = await chat.sendMessageStream(last[1] ? [last[0].text, last[1]] : last[0].text);
-  for await (const chunk of result.stream) {
-    yield chunk.text();
+  const response = await google.models.generateContentStream({
+    model,
+    contents: messages,
+  });
+  for await (const chunk of response) {
+    yield chunk.text;
   }
 }
 
