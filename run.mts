@@ -3,7 +3,7 @@ import path from 'node:path';
 import express from 'express';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, type Part as GooglePart, type Content as GoogleContent } from '@google/genai';
 
 let PORT = 21665; // 'gpt' in base 36
 
@@ -23,6 +23,7 @@ let openai = new OpenAI({
 let anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
   defaultHeaders: {
+    // @ts-expect-error
     'output-128k-2025-02-19': true,
   }
 });
@@ -30,9 +31,9 @@ let anthropic = new Anthropic({
 let google = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 
 
-let _fail = e => { throw new Error(e); };
+let _fail = (e: any) => { throw new Error(e); };
 
-function anthropicToOpenAIContent(content) {
+function anthropicToOpenAIContent(content: Anthropic.ContentBlockParam | string): OpenAI.ChatCompletionContentPart {
   return typeof content === 'string'
     ? { type: 'text', text: content }
     : content.type === 'text'
@@ -47,14 +48,16 @@ function anthropicToOpenAIContent(content) {
     : _fail('unknown message ' + JSON.stringify(content));
 }
 
-function anthropicToOpenAI(messages) {
+function anthropicToOpenAI(messages: Anthropic.MessageParam[]): OpenAI.ChatCompletionMessageParam[] {
+  // we need the cast because OpenAI's types say assistants cannot include images
+  // which is true but annoying to type correctly
   return messages.map(m => ({
     role: m.role,
     content: Array.isArray(m.content) ? m.content.map(anthropicToOpenAIContent) : anthropicToOpenAIContent(m.content)
-  }));
+  })) as OpenAI.ChatCompletionMessageParam[];
 }
 
-function anthropicToGeminiContent(content) {
+function anthropicToGeminiContent(content: Anthropic.ContentBlockParam | string): GooglePart {
   return typeof content === 'string'
     ? { text: content }
     : content.type === 'text'
@@ -69,15 +72,17 @@ function anthropicToGeminiContent(content) {
     : _fail('unknown message ' + JSON.stringify(content));
 }
 
-function anthropicToGemini(messages) {
+function anthropicToGemini(messages: Anthropic.MessageParam[]): GoogleContent[] {
   return messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts: Array.isArray(m.content) ? m.content.map(anthropicToGeminiContent) : anthropicToGeminiContent(m.content)
+    parts: Array.isArray(m.content) ? m.content.map(anthropicToGeminiContent) : [anthropicToGeminiContent(m.content)]
   }));
 }
 
-async function* openaiStream({ model, systemPrompt, messages }) {
-  const adjusted = model in nonSystem
+type StreamArgs = { model: string, systemPrompt: string, messages: Anthropic.MessageParam[]};
+
+async function* openaiStream({ model, systemPrompt, messages }: StreamArgs) {
+  const adjusted: OpenAI.ChatCompletionMessageParam[] = model in nonSystem
     ? anthropicToOpenAI(messages)
     : [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAI(messages)];
   const stream = await openai.chat.completions.create({
@@ -94,15 +99,7 @@ async function* openaiStream({ model, systemPrompt, messages }) {
   }
 }
 
-async function openaiO1({ model, messages }) {
-  const response = await openai.chat.completions.create({
-    model,
-    messages,
-  });
-  return response.choices[0].message.content;
-}
-
-async function* anthropicStream({ model, systemPrompt, messages }) {
+async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
   const stream = anthropic.messages.stream({
     model,
     system: systemPrompt,
@@ -119,19 +116,21 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
   }
 }
 
-async function* googleStream({ model, systemPrompt, messages }) {
-  messages = anthropicToGemini(messages);
+async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
+  let adjusted = anthropicToGemini(messages);
   const response = await google.models.generateContentStream({
     model,
-    contents: messages,
+    contents: adjusted,
+    config: { systemInstruction: systemPrompt },
   });
   for await (const chunk of response) {
-    yield chunk.text;
+    yield chunk.text!;
   }
 }
 
 
-let models = {
+let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
+  // @ts-expect-error ugh
   __proto__: null,
   'gpt-4-turbo': openaiStream,
   'gpt-4o-mini': openaiStream,
@@ -209,13 +208,7 @@ app.post('/api', async (req, res) => {
   res.setHeader('content-type', 'text/plain');
   try {
     if (model in nonStream) {
-      const message = await openaiO1({ model, messages });
-      res.write(JSON.stringify(message) + '\n');
-      messages.push({
-        role: 'assistant',
-        content: message,
-      });
-      res.end();
+      throw new Error('no current non-streaming models');
     } else {
       const stream = models[model]({ model, systemPrompt, messages });
 
@@ -232,11 +225,11 @@ app.post('/api', async (req, res) => {
     }
     let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
     fs.writeFileSync(path.join(outdir, name + '.json'), JSON.stringify({ user, model, systemPrompt, messages }), 'utf8');
-  } catch (error) {
+  } catch (error: any) {
     if (error.response?.status) {
       console.error(error.response.status, error.message);
-      error.response.data.on('data', data => {
-        const message = data.toString();
+      error.response.data.on('data', (data: any) => {
+        let message = data.toString();
         try {
           message = JSON.parse(message);
         } catch {

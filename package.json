@@ -1,14 +1,18 @@
 {
   "private": true,
   "scripts": {
+    "check": "tsc",
     "build": "esbuild --bundle --format=iife --global-name=tiktoken tokenize.js > tokenize-bundled.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",
     "@google/genai": "^0.6.1",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.14",
     "esbuild": "^0.18.17",
     "express": "^4.18.2",
     "js-tiktoken": "^1.0.7",
-    "openai": "^4.67.1"
+    "openai": "^4.67.1",
+    "typescript": "^5.8.2"
   }
 }

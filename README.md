@@ -37,8 +37,10 @@ Ensure you have a reasonably recent version of node installed. Then
 
 ```sh
 npm install
-node run.mjs
+node run.mts
 ```
+
+If you are using a version of node prior to 23.6.0, you will likely need to include `--experimental-strip-types` after the `node` command.
 
 This will bring up a server at `http://localhost:21665`; point your browser there.
 
