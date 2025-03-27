@@ -24,6 +24,9 @@ let openai = new OpenAI({
 
 let anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
+  defaultHeaders: {
+    'output-128k-2025-02-19': true,
+  }
 });
 
 let google = (new GoogleGenerativeAI(GOOGLE_API_KEY));
@@ -53,15 +56,25 @@ function anthropicToOpenAI(messages) {
   }));
 }
 
+function anthropicToGeminiContent(content) {
+  return typeof content === 'string'
+    ? { text: content }
+    : content.type === 'text'
+    ? { text: content.text }
+    : content.type === 'image' && content.source.type === 'base64'
+    ? {
+        inlineData: {
+          data: content.source.data,
+          mimeType: content.source.media_type,
+        },
+      }
+    : _fail('unknown message ' + JSON.stringify(content));
+}
+
 function anthropicToGemini(messages) {
   return messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
-    parts:
-      Array.isArray(m.content)
-        ? m.content.length === 1 && m.content[0].type === 'text'
-          ? [{ text: m.content[0].text }]
-          : _fail('message is too complicated for google ' + JSON.stringify(m))
-        : [{ text: m.content }],
+    parts: Array.isArray(m.content) ? m.content.map(anthropicToGeminiContent) : anthropicToGeminiContent(m.content)
   }));
 }
 
@@ -96,7 +109,9 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
     model,
     system: systemPrompt,
     messages,
-    max_tokens: 4096,
+    // Include the beta header output-128k-2025-02-19 in your API request to increase the maximum output token length to 128k tokens for Claude 3.7 Sonnet.
+    // it complains if it's more than 64000 though
+    max_tokens: 64_000,
   });
 
   for await (const event of stream) {
@@ -107,14 +122,18 @@ async function* anthropicStream({ model, systemPrompt, messages }) {
 }
 
 async function* googleStream({ model, systemPrompt, messages }) {
-  let mgr = google.getGenerativeModel({ model });
-
-  // gemini does not support system prompts
+  let mgr = google.getGenerativeModel({ model, systemInstruction: systemPrompt });
 
   messages = anthropicToGemini(messages);
-  let last = messages.pop().parts[0].text;
-  const chat = mgr.startChat({ history: messages });
-  let result = await chat.sendMessageStream(last);
+  let last = messages.pop().parts;
+  let chat = mgr.startChat({ history: messages });
+
+  if (typeof last[0].text !== 'string' || last[1] && !last[1].inlineData || last.length > 2) {
+    console.dir(messages, { depth: Infinity });
+    throw new Error('confused message format for gemini');
+  }
+
+  let result = await chat.sendMessageStream([last[0].text, last[1]]);
   for await (const chunk of result.stream) {
     yield chunk.text();
   }
@@ -137,6 +156,7 @@ let models = {
   'gemini-1.5-flash-latest': googleStream,
   'gemini-2.0-flash-exp': googleStream,
   'gemini-2.0-flash-thinking-exp': googleStream,
+  'gemini-2.5-pro-exp-03-25': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
@@ -236,7 +256,8 @@ app.post('/api', async (req, res) => {
     } else {
       console.error('An error occurred during upstream request', error);
     }
-    throw new Error('failed'); // suppress gross express stack
+    throw error;
+    // throw new Error('failed'); // suppress gross express stack
   }
 });
 

@@ -5,7 +5,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.37.0",
-    "@google/generative-ai": "^0.21.0",
+    "@google/generative-ai": "^0.24.0",
     "esbuild": "^0.18.17",
     "express": "^4.18.2",
     "js-tiktoken": "^1.0.7",

@@ -226,20 +226,12 @@ dialog {
       <input type="radio" id="opus" name="model" value="claude-3-opus-20240229">
       </span>
       <span>
-      <label for="gemini-1.5-flash-latest">Gemini 1.5 Flash (0.1¢)</label>
-      <input type="radio" id="gemini-1.5-flash-latest" name="model" value="gemini-1.5-flash-latest">
-      </span>
-      <span>
-      <label for="gemini-1.5-pro-latest">Gemini 1.5 Pro (1¢)</label>
-      <input type="radio" id="gemini-1.5-pro-latest" name="model" value="gemini-1.5-pro-latest">
-      </span>
-      <span>
       <label for="gemini-2.0-flash-exp">Gemini 2 Flash (0?¢)</label>
       <input type="radio" id="gemini-2.0-flash-exp" name="model" value="gemini-2.0-flash-exp">
       </span>
       <span>
-      <label for="gemini-2.0-flash-thinking-exp">Gemini 2 Flash Thinking (0?¢)</label>
-      <input type="radio" id="gemini-2.0-flash-thinking-exp" name="model" value="gemini-2.0-flash-thinking-exp">
+      <label for="gemini-2.5-pro-exp-03-25">Gemini 2.5 (0?¢)</label>
+      <input type="radio" id="gemini-2.5-pro-exp-03-25" name="model" value="gemini-2.5-pro-exp-03-25">
       </span>
       <span class="span-rule"></span>
       <span>
@@ -255,7 +247,7 @@ dialog {
     </div>
     <div class="center-inputs">
       <div class="attach-image-container">
-        <span id="attach-container"><span class="link" id="attach">attach image</span> (not gemini/o1)</span>
+        <span id="attach-container"><span class="link" id="attach">attach image</span> (not o3-mini)</span>
         <span id="unattach" class="link" style="display:none">unattach</span>
       </div>
       <div class="input-container">
@@ -508,8 +500,9 @@ dialog {
 
   function botMessage(query) {
     let model = document.querySelector('input[name="model"]:checked').value;
-    if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) && model.includes('gemini')) {
-      alert("gemini doesn't support image inputs, sorry");
+    if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) &&
+model.includes('o3-mini')) {
+      alert("o3-mini doesn't support image inputs, sorry");
       return;
     }
 
@@ -520,7 +513,7 @@ dialog {
     if (img) {
       let imgEle = document.createElement('img');
       imgEle.src = img;
-      m1.append(imgEle);
+      m1.append(document.createElement('br'), imgEle);
     }
 
     fixupTextboxSize();
