@@ -133,7 +133,7 @@ async function* googleStream({ model, systemPrompt, messages }) {
     throw new Error('confused message format for gemini');
   }
 
-  let result = await chat.sendMessageStream([last[0].text, last[1]]);
+  let result = await chat.sendMessageStream(last[1] ? [last[0].text, last[1]] : last[0].text);
   for await (const chunk of result.stream) {
     yield chunk.text();
   }
