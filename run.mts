@@ -118,13 +118,42 @@ async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
 
 async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
   let adjusted = anthropicToGemini(messages);
+
   const response = await google.models.generateContentStream({
-    model,
+    model: 'gemini-2.0-flash-exp-image-generation',
     contents: adjusted,
-    config: { systemInstruction: systemPrompt },
+    config: {
+      systemInstruction: systemPrompt,
+      responseModalities: ['Text', 'Image'],
+    },
   });
   for await (const chunk of response) {
+    console.dir(chunk, { depth: Infinity });
     yield chunk.text!;
+  }
+}
+
+async function* googleImages({ model, systemPrompt, messages }: StreamArgs) {
+  let adjusted = anthropicToGemini(messages);
+
+  const response2 = await google.models.generateContent({
+    model: 'gemini-2.0-flash-exp-image-generation',
+    contents: adjusted,
+    config: {
+      responseModalities: ['Text', 'Image']
+    },
+  });
+  for (const part of response2.candidates![0].content!.parts!) {
+    // Based on the part type, either show the text or save the image
+    if (part.text) {
+      yield part.text;
+    } else if (part.inlineData) {
+      const imageData = part.inlineData.data!;
+      yield '!!!@@@!!!' + imageData;
+    } else {
+      console.log(part);
+      throw new Error('idk what that is');
+    }
   }
 }
 
@@ -147,6 +176,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gemini-2.0-flash-exp': googleStream,
   'gemini-2.0-flash-thinking-exp': googleStream,
   'gemini-2.5-pro-exp-03-25': googleStream,
+  'gemini-2.0-flash-exp-image-generation': googleImages,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
