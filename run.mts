@@ -120,15 +120,13 @@ async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
   let adjusted = anthropicToGemini(messages);
 
   const response = await google.models.generateContentStream({
-    model: 'gemini-2.0-flash-exp-image-generation',
+    model,
     contents: adjusted,
     config: {
       systemInstruction: systemPrompt,
-      responseModalities: ['Text', 'Image'],
     },
   });
   for await (const chunk of response) {
-    console.dir(chunk, { depth: Infinity });
     yield chunk.text!;
   }
 }
