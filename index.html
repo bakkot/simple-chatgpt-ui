@@ -185,8 +185,29 @@ dialog {
   float: right;
 }
 
+.drop-zone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.drop-zone-message {
+  background-color: white;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
 </style>
 <body>
+<div class="drop-zone">
+  <div class="drop-zone-message">Drop JSON file to load conversation</div>
+</div>
 <div style="display: none">
   <div class="user-message-container">
     <div class="name">user</div>
@@ -608,5 +629,121 @@ model.includes('o3-mini')) {
       systemPrompt,
       messages,
     }, callback, err);
+  }
+
+  // Drag and drop handler for JSON files
+  let dropZone = document.querySelector('.drop-zone');
+
+  // Prevent default drag behaviors
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    document.body.addEventListener(eventName, preventDefaults, false);
+  });
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  // Show/hide drop zone
+  ['dragenter', 'dragover'].forEach(eventName => {
+    document.body.addEventListener(eventName, () => {
+      dropZone.style.display = 'flex';
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => {
+      dropZone.style.display = 'none';
+    }, false);
+  });
+
+  // Handle dropped files
+  document.body.addEventListener('drop', handleDrop, false);
+
+  function handleDrop(e) {
+    let dt = e.dataTransfer;
+    let files = dt.files;
+
+    if (files.length > 0) {
+      let file = files[0];
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
+        let reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            let jsonData = JSON.parse(event.target.result);
+            loadConversationFromJson(jsonData);
+          } catch (error) {
+            alert('Error parsing JSON file: ' + error.message);
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        alert('Please drop a JSON file');
+      }
+    }
+  }
+
+  function loadConversationFromJson(jsonData) {
+    // Clear existing messages
+    messagesEle.innerHTML = '';
+    messages = [];
+
+    if (jsonData.model) {
+      let modelRadio = document.querySelector(`input[value="${jsonData.model}"]`);
+      if (modelRadio) {
+        modelRadio.checked = true;
+      }
+    }
+
+    if (jsonData.systemPrompt) {
+      systemPrompt = jsonData.systemPrompt;
+    }
+
+    // Process messages
+    if (jsonData.messages && Array.isArray(jsonData.messages)) {
+      for (let i = 0; i < jsonData.messages.length; i++) {
+        let message = jsonData.messages[i];
+        console.log({ message })
+        if (!message.role || !message.content) continue;
+        if (typeof message.content === 'string') {
+          message.content = [{ type: 'text', text: message.content }];
+        }
+
+        let isUser = message.role === 'user';
+        let messageContainer = addMessage(isUser);
+
+        // Process message content (text and images)
+        let textContent = '';
+
+        for (let item of message.content) {
+          // TODO probably fix saving bot images in the output instead of this hack
+          if (item.type === 'text' && item.text && item.text.startsWith('!!!@@@!!!')) {
+            item = {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: item.text.slice('!!!@@@!!!'.length),
+              },
+            };
+          };
+          if (item.type === 'text' && item.text) {
+            textContent += item.text;
+          } else if (item.type === 'image' && item.source && item.source.type === 'base64') {
+            // Add image after text content is set
+            let imgEle = document.createElement('img');
+            let mediaType = item.source.media_type || 'image/jpeg';
+            imgEle.src = `data:${mediaType};base64,${item.source.data}`;
+            messageContainer.append(document.createElement('br'), imgEle);
+          }
+        }
+
+        // Set text content
+        messageContainer.firstElementChild.textContent = textContent;
+
+        // Add to messages array
+        messages.push(message);
+      }
+    }
   }
 </script>
