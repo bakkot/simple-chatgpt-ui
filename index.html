@@ -299,32 +299,30 @@ dialog {
       <input type="radio" id="opus" name="model" value="claude-3-opus-20240229">
       </span>
       <span>
-      <label for="gemini-2.0-flash-exp">Gemini 2 Flash (0?¢)</label>
-      <input type="radio" id="gemini-2.0-flash-exp" name="model" value="gemini-2.0-flash-exp">
-      </span>
-      <span>
       <label for="gemini-2.0-flash-exp-image-generation">Gemini 2 Flash w/ image gen (0?¢)</label>
       <input type="radio" id="gemini-2.0-flash-exp-image-generation" name="model" value="gemini-2.0-flash-exp-image-generation">
       </span>
       <span>
-      <label for="gemini-2.5-pro-exp-03-25">Gemini 2.5 (0?¢)</label>
-      <input type="radio" id="gemini-2.5-pro-exp-03-25" name="model" value="gemini-2.5-pro-exp-03-25">
+      <label for="gemini-2.5-flash-preview-04-17">Gemini 2.5 Flash (0.15¢)</label>
+      <input type="radio" id="gemini-2.5-flash-preview-04-17" name="model" value="gemini-2.5-flash-preview-04-17">
+      </span>
+      <span>
+      <label for="gemini-2.5-pro-preview-03-25">Gemini 2.5 (1.25¢)</label>
+      <input type="radio" id="gemini-2.5-pro-preview-03-25" name="model" value="gemini-2.5-pro-preview-03-25">
       </span>
       <span class="span-rule"></span>
       <span>
-      <!-- pricing for o1 is tricky because of the reasoning steps -->
-      <!-- I am just naively multiplying prices by 10 here -->
-      <label for="o3-mini">o3-mini (4¢)</label>
-      <input type="radio" id="o3-mini" name="model" value="o3-mini">
+      <label for="o3">o3 (4¢)</label>
+      <input type="radio" id="o3" name="model" value="o3">
       </span>
       <span>
-      <label for="o1">o1 (60¢)</label>
-      <input type="radio" id="o1" name="model" value="o1">
+      <label for="o4-mini">o4-mini (0.4¢)</label>
+      <input type="radio" id="o4-mini" name="model" value="o4-mini">
       </span>
     </div>
     <div class="center-inputs">
       <div class="attach-image-container">
-        <span id="attach-container"><span class="link" id="attach">attach image</span> (not o3-mini)</span>
+        <span id="attach-container"><span class="link" id="attach">attach image</span></span>
         <span id="unattach" class="link" style="display:none">unattach</span>
       </div>
       <div class="input-container">
@@ -646,11 +644,11 @@ dialog {
 
   function botMessage(query) {
     let model = document.querySelector('input[name="model"]:checked').value;
-    if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) &&
-model.includes('o3-mini')) {
-      alert("o3-mini doesn't support image inputs, sorry");
-      return;
-    }
+//     if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) &&
+// model.includes('o3-mini')) {
+//       alert("o3-mini doesn't support image inputs, sorry");
+//       return;
+//     }
 
     inputEle.value = '';
     localStorage.setItem('chatgpt-ui-model', model);
