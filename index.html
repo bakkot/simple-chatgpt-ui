@@ -203,6 +203,58 @@ dialog {
   border-radius: 5px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
 }
+
+.code-block-container {
+  position: relative;
+  margin: 0.5em 0;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.code-block-container pre {
+  margin: 0;
+  padding: 1em;
+  overflow-x: auto;
+  background-color: transparent;
+  border-radius: 4px;
+}
+
+.code-block-container code {
+  font-family: monospace;
+  font-size: 0.9em;
+  display: block;
+  white-space: pre;
+  background: none;
+  padding: 0;
+}
+
+.copy-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 3px 6px;
+  font-size: 0.8em;
+  cursor: pointer;
+  background-color: #ddd;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+  z-index: 1;
+}
+
+.code-block-container:hover .copy-button {
+  opacity: 1;/
+}
+
+.copy-button:active {
+  background-color: #bbb;
+}
+
+.bot-message-container .text .content-wrapper pre {
+  word-wrap: normal;
+}
 </style>
 <body>
 <div class="drop-zone">
@@ -215,7 +267,7 @@ dialog {
   </div>
   <div class="bot-message-container">
     <div class="name">bot</div>
-    <div class="text"><span>content</span></div>
+    <div class="text"><div class="content-wrapper">content</div></div>
   </div>
 </div>
 <div class=content>
@@ -523,6 +575,75 @@ dialog {
     }
   }
 
+  function createCopyButton(codeContent) {
+    const button = document.createElement('button');
+    button.textContent = 'Copy';
+    button.className = 'copy-button';
+    button.addEventListener('click', () => {
+      navigator.clipboard.writeText(codeContent).then(() => {
+        button.textContent = 'Copied!';
+        button.style.backgroundColor = '#aeffae';
+        setTimeout(() => {
+          button.textContent = 'Copy';
+          button.style.backgroundColor = '';
+        }, 2000);
+      }).catch(err => {
+        console.error('Failed to copy code: ', err);
+        button.textContent = 'Error';
+         button.style.backgroundColor = '#ffaaaa';
+        setTimeout(() => {
+          button.textContent = 'Copy';
+          button.style.backgroundColor = '';
+        }, 2000);
+      });
+    });
+    return button;
+  }
+
+  function renderMessageContent(container, text) {
+    container.innerHTML = '';
+
+    const codeBlockRegex = /^```(\w*)\n([\s\S]*?)\n```$/gm;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        const textSegment = text.substring(lastIndex, match.index);
+        container.appendChild(document.createTextNode(textSegment));
+      }
+
+      const lang = match[1];
+      const codeContent = match[2];
+
+      const codeContainer = document.createElement('div');
+      codeContainer.className = 'code-block-container';
+
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+
+      if (lang) {
+        code.className = `language-${lang}`;
+      }
+      code.textContent = codeContent;
+      pre.appendChild(code);
+
+      const copyButton = createCopyButton(codeContent);
+      codeContainer.appendChild(copyButton);
+      codeContainer.appendChild(pre);
+
+      container.appendChild(codeContainer);
+
+      lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      const trailingText = text.substring(lastIndex);
+      container.appendChild(document.createTextNode(trailingText));
+    }
+  }
+
+
   function botMessage(query) {
     let model = document.querySelector('input[name="model"]:checked').value;
     if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) &&
@@ -543,7 +664,8 @@ model.includes('o3-mini')) {
 
     fixupTextboxSize();
     let m2 = addMessage(false);
-    m2.firstElementChild.textContent = 'Thinking...';
+    let messageContentDiv = m2.querySelector('.content-wrapper');
+    messageContentDiv.textContent = 'Thinking...';
     messagesEle.scrollTop = messagesEle.scrollHeight;
     let message = '';
     let botImage = null;
@@ -572,12 +694,12 @@ model.includes('o3-mini')) {
         // bot image!
         if (message === '') {
           // clear the "Thinking..." text
-          m2.firstElementChild.textContent = '';
+          messageContentDiv.textContent = '';
         }
         botImage = text.slice('!!!@@@!!!'.length);
         let imgEle = document.createElement('img');
         imgEle.src = 'data:image/png;base64,' + botImage;
-        m2.append(document.createElement('br'), imgEle);
+        messageContentDiv.append(document.createElement('br'), imgEle);
         return;
       }
       message += text;
@@ -585,21 +707,22 @@ model.includes('o3-mini')) {
         return;
       }
       let isAtBottom = (messagesEle.scrollHeight - messagesEle.scrollTop - messagesEle.clientHeight) < 1;
-      m2.firstElementChild.textContent = message.trimStart();
+
+      renderMessageContent(messageContentDiv, message.trimStart())
+
       if (isAtBottom) {
         messagesEle.scrollTop = messagesEle.scrollHeight;
       }
     };
     let err = e => {
       console.error(e);
-      if (m2.firstElementChild.textContent === ' ') {
-        m2.firstElementChild.textContent = '';
+      let errorDiv = document.createElement('div');
+      errorDiv.style.color = 'red';
+      errorDiv.textContent = e.message + '\nThe immediately preceding message has been cleared from memory; you can try sending it again.';
+      messageContentDiv.appendChild(errorDiv);
+      if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+        messages.pop();
       }
-      let err = document.createElement('div');
-      err.style.color = 'red';
-      err.textContent = e.message + '\nThe immediately preceding message has been cleared from memory; you can try sending it again.';
-      m2.firstElementChild.append(err);
-      messages.pop();
     };
 
     let content = [
