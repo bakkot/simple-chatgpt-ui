@@ -106,7 +106,7 @@ async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
     messages,
     // Include the beta header output-128k-2025-02-19 in your API request to increase the maximum output token length to 128k tokens for Claude 3.7 Sonnet.
     // it complains if it's more than 64000 though
-    max_tokens: 64_000,
+    max_tokens: model.includes('opus') ? 32_000 : 64_000,
   });
 
   for await (const event of stream) {
@@ -178,11 +178,15 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gemini-2.5-pro-exp-03-25': googleStream,
   'gemini-2.0-flash-exp-image-generation': googleImages,
   'gemini-2.5-pro-preview-03-25': googleStream,
+  'gemini-2.5-pro-preview-05-06': googleStream,
   'gemini-2.5-flash-preview-04-17': googleStream,
+  'gemini-2.5-flash-preview-05-20': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
   'claude-3-7-sonnet-latest': anthropicStream,
+  'claude-sonnet-4-20250514': anthropicStream,
+  'claude-opus-4-20250514': anthropicStream,
 };
 
 let nonStream = {
