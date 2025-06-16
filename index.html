@@ -115,13 +115,6 @@ img {
   margin-top: 2px;
 }
 
-.token-count {
-  display: flex;
-  align-items: center;
-  color: #999;
-  margin-left: 1rem;
-}
-
 .model-select {
   display: flex;
   flex-direction: column;
@@ -340,7 +333,6 @@ dialog {
         </div>
       </div>
     </div>
-  <div class="token-count"></div>
   </div>
 </div>
 
@@ -440,15 +432,12 @@ dialog {
   } else {
     userDialog.showModal();
   }
-</script>
-<!-- <script src='./tokenize-bundled.js'></script> -->
-<script>
+
   let baseUserEle = document.querySelector('.user-message-container');
   let baseBotEle = document.querySelector('.bot-message-container');
   let messagesEle = document.querySelector('.messages');
   let inputEle = document.querySelector('.input');
   let sendButtonEle = document.querySelector('.send-button');
-  let tokenCountEle = document.querySelector('.token-count');
   let imageInput = document.querySelector('#imageInput');
 
   let systemPrompt = 'Answer the question as asked. Give concise responses to simple questions, but provide thorough responses to more complex and open-ended questions. Omit any disclaimers or equivocation except when absolutely necessary. No need to specify that you are an AI model; I know this.';
@@ -468,7 +457,6 @@ dialog {
 
   inputEle.addEventListener('input', () => {
     let text = inputEle.value.trim();
-    updateCount(text);
   });
 
   sendButtonEle.addEventListener('click', submit);
@@ -504,20 +492,6 @@ dialog {
   }
   unattachContainer.addEventListener('click', unattach);
 
-
-  function updateCount(input = '') {
-    // TODO fix this
-    // let newMessages = [...messages];
-    // if (input !== '') {
-    //   newMessages.push({
-    //     role: 'user',
-    //     content: input,
-    //   });
-    // }
-    // let count = tiktoken.countTokens(newMessages);
-    // tokenCountEle.textContent = count;
-  }
-  updateCount();
 
   function submit() {
     let text = inputEle.value.trim();
@@ -645,11 +619,6 @@ dialog {
 
   function botMessage(query) {
     let model = document.querySelector('input[name="model"]:checked').value;
-//     if ((img || messages.some(m => m.content.some(c => c.type === 'image'))) &&
-// model.includes('o3-mini')) {
-//       alert("o3-mini doesn't support image inputs, sorry");
-//       return;
-//     }
 
     inputEle.value = '';
     localStorage.setItem('chatgpt-ui-model', model);
@@ -686,7 +655,6 @@ dialog {
           role: 'assistant',
           content,
         });
-        updateCount();
         return;
       }
       if (text.startsWith('!!!@@@!!!')) {
@@ -753,10 +721,8 @@ dialog {
     }, callback, err);
   }
 
-  // Drag and drop handler for JSON files
   let dropZone = document.querySelector('.drop-zone');
 
-  // Prevent default drag behaviors
   ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
     document.body.addEventListener(eventName, preventDefaults, false);
   });
@@ -766,7 +732,6 @@ dialog {
     e.stopPropagation();
   }
 
-  // Show/hide drop zone
   ['dragenter', 'dragover'].forEach(eventName => {
     document.body.addEventListener(eventName, () => {
       dropZone.style.display = 'flex';
@@ -779,7 +744,6 @@ dialog {
     }, false);
   });
 
-  // Handle dropped files
   document.body.addEventListener('drop', handleDrop, false);
 
   function handleDrop(e) {
@@ -806,7 +770,6 @@ dialog {
   }
 
   function loadConversationFromJson(jsonData) {
-    // Clear existing messages
     messagesEle.innerHTML = '';
     messages = [];
 
@@ -821,7 +784,6 @@ dialog {
       systemPrompt = jsonData.systemPrompt;
     }
 
-    // Process messages
     if (jsonData.messages && Array.isArray(jsonData.messages)) {
       for (let i = 0; i < jsonData.messages.length; i++) {
         let message = jsonData.messages[i];
@@ -834,7 +796,6 @@ dialog {
         let isUser = message.role === 'user';
         let messageContainer = addMessage(isUser);
 
-        // Process message content (text and images)
         let textContent = '';
 
         for (let item of message.content) {
@@ -852,7 +813,6 @@ dialog {
           if (item.type === 'text' && item.text) {
             textContent += item.text;
           } else if (item.type === 'image' && item.source && item.source.type === 'base64') {
-            // Add image after text content is set
             let imgEle = document.createElement('img');
             let mediaType = item.source.media_type || 'image/jpeg';
             imgEle.src = `data:${mediaType};base64,${item.source.data}`;
@@ -860,10 +820,8 @@ dialog {
           }
         }
 
-        // Set text content
         messageContainer.firstElementChild.textContent = textContent;
 
-        // Add to messages array
         messages.push(message);
       }
     }
