@@ -206,6 +206,28 @@ let nonSystem = {
 };
 
 
+interface SessionData {
+  user: string;
+  model: string;
+  systemPrompt: string;
+  messages: Anthropic.MessageParam[];
+  timestamp: number;
+}
+
+let activeSessions = new Map<string, SessionData>();
+
+function cleanupOldSessions() {
+  let cutoff = Date.now() - 60_000; // 1 minute
+  for (let [sessionId, data] of activeSessions) {
+    if (data.timestamp < cutoff) {
+      activeSessions.delete(sessionId);
+    } else {
+      // Map is insertion-ordered, so if this one is fresh, all following ones are too
+      break;
+    }
+  }
+}
+
 let app = express();
 app.use(express.json({ limit: '50mb' }));
 app.get('/', function (req, res) {
@@ -223,7 +245,7 @@ app.post('/check-user', (req, res) => {
     res.send('fail');
   }
 });
-app.post('/api', async (req, res) => {
+app.post('/api/start', async (req, res) => {
   let { user, model, systemPrompt, messages } = req.body;
   if (!ALLOWED_USERS.includes(user)) {
     res.status(403);
@@ -241,7 +263,30 @@ app.post('/api', async (req, res) => {
     return;
   }
 
-  res.setHeader('content-type', 'text/plain');
+  cleanupOldSessions();
+
+  let sessionId = Math.random().toString(36).substring(2, 15);
+  activeSessions.set(sessionId, { user, model, systemPrompt, messages, timestamp: Date.now() });
+
+  res.json({ sessionId });
+});
+
+app.get('/api/stream/:sessionId', async (req, res) => {
+  let sessionId = req.params.sessionId;
+  let sessionData = activeSessions.get(sessionId);
+
+  if (!sessionData) {
+    res.status(404).send('Session not found');
+    return;
+  }
+
+  activeSessions.delete(sessionId);
+  let { user, model, systemPrompt, messages } = sessionData;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
   try {
     if (model in nonStream) {
       throw new Error('no current non-streaming models');
@@ -250,13 +295,14 @@ app.post('/api', async (req, res) => {
 
       let mess = '';
       for await (const chunk of stream) {
-        res.write(JSON.stringify(chunk) + '\n');
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
         mess += chunk;
       }
       messages.push({
         role: 'assistant',
         content: mess,
       });
+      res.write(`data: null\n\n`);
       res.end();
     }
     let name = (new Date).toISOString().replaceAll(':', '.').replaceAll('T', ' ');
@@ -276,8 +322,8 @@ app.post('/api', async (req, res) => {
     } else {
       console.error('An error occurred during upstream request', error);
     }
-    throw error;
-    // throw new Error('failed'); // suppress gross express stack
+    res.write(`data: {"error": ${JSON.stringify(error.message)}}\n\n`);
+    res.end();
   }
 });
 

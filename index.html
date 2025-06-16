@@ -531,47 +531,44 @@ dialog {
     return text;
   }
 
-  async function* wrapReader(reader) {
-    // someday, https://github.com/whatwg/streams/pull/980#issuecomment-1167194347
-    while (true) {
-      let { done, value } = await reader.read();
-      if (done) return;
-      yield value;
-    }
-  }
-
-  function splitLinesTransformStream() {
-    let buffer = '';
-    return new TransformStream({
-      transform(chunk, controller) {
-        let parts = (buffer + chunk).split('\n');
-        buffer = parts.pop();
-        for (let part of parts) {
-          controller.enqueue(part);
-        }
-      },
-      flush(controller) {
-        if (buffer.length > 0) {
-          controller.enqueue(buffer);
-        }
-      },
-    });
-  }
-
   async function send(message, callback, err) {
     try {
-      let res = await fetch('./api', { method: 'post', body: JSON.stringify(message), headers: { 'content-type': 'application/json' } });
-      if (!res.ok) {
-        throw new Error('Error: ' + await res.text());
+      let startRes = await fetch('./api/start', {
+        method: 'post',
+        body: JSON.stringify(message),
+        headers: { 'content-type': 'application/json' }
+      });
+      if (!startRes.ok) {
+        throw new Error('Error: ' + await startRes.text());
       }
-      let reader = res.body
-        .pipeThrough(new TextDecoderStream())
-        .pipeThrough(splitLinesTransformStream())
-        .getReader();
-      for await (let item of wrapReader(reader)) {
-        callback(JSON.parse(item));
-      }
-      callback();
+      let { sessionId } = await startRes.json();
+
+      let eventSource = new EventSource(`./api/stream/${sessionId}`);
+
+      eventSource.onmessage = function(event) {
+        let data = event.data;
+        if (data === 'null') {
+          eventSource.close();
+          callback();
+        } else {
+          try {
+            let parsed = JSON.parse(data);
+            if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+            callback(parsed);
+          } catch (e) {
+            eventSource.close();
+            err(e);
+          }
+        }
+      };
+
+      eventSource.onerror = function(event) {
+        eventSource.close();
+        err(new Error('SSE connection error'));
+      };
+
     } catch (e) {
       err(e);
     }
