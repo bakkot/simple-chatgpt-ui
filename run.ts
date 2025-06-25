@@ -57,6 +57,50 @@ function anthropicToOpenAI(messages: Anthropic.MessageParam[]): OpenAI.ChatCompl
   })) as OpenAI.ChatCompletionMessageParam[];
 }
 
+function anthropicToOpenAIResponseContent(content: Anthropic.ContentBlockParam | string, isAssistant: false): OpenAI.Responses.ResponseInputContent;
+function anthropicToOpenAIResponseContent(content: Anthropic.ContentBlockParam | string, isAssistant: true): OpenAI.Responses.ResponseOutputText;
+function anthropicToOpenAIResponseContent(content: Anthropic.ContentBlockParam | string, isAssistant: boolean): OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseOutputText {
+  if (typeof content === 'string') content = { type: 'text', text: content };
+  if (isAssistant) {
+    if (content.type === 'text') {
+      return { type: 'output_text', text: content.text, annotations: [] };
+    }
+    throw new Error('openai responses should be text, got ' + JSON.stringify(content));
+  }
+  if (content.type === 'text') {
+    return { type: 'input_text', text: content.text };
+  } else if (content.type === 'image' && content.source.type === 'base64') {
+    return {
+      type: 'input_image',
+      image_url: 'data:' + content.source.media_type + ';base64,' + content.source.data,
+      detail: 'auto',
+    };
+  }
+  throw new Error('unknown message ' + JSON.stringify(content));
+}
+
+function anthropicToOpenAIResponse(messages: Anthropic.MessageParam[]): OpenAI.Responses.ResponseInputItem[] {
+  return messages.map(m => {
+    if (m.role === 'assistant') {
+      return {
+        role: 'assistant',
+        content: Array.isArray(m.content)
+          ? m.content.map(c => anthropicToOpenAIResponseContent(c, true))
+          : [anthropicToOpenAIResponseContent(m.content, true)],
+          // we need to use a value which passes format checks but it doesn't appear to matter what it is
+        id: 'msg_' + '0'.repeat(48),
+      };
+    } else {
+      return {
+        role: 'user',
+        content: Array.isArray(m.content)
+          ? m.content.map(c => anthropicToOpenAIResponseContent(c, false))
+          : [anthropicToOpenAIResponseContent(m.content, false)],
+      };
+    }
+  });
+}
+
 function anthropicToGeminiContent(content: Anthropic.ContentBlockParam | string): GooglePart {
   return typeof content === 'string'
     ? { text: content }
@@ -95,6 +139,29 @@ async function* openaiStream({ model, systemPrompt, messages }: StreamArgs) {
     let tok = chunk.choices[0];
     if (tok.delta?.content != null) {
       yield tok.delta.content;
+    }
+  }
+}
+
+async function* openaiResponseStream({ model, systemPrompt, messages }: StreamArgs) {
+  const adjusted: OpenAI.Responses.ResponseInputItem[] = [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAIResponse(messages)];
+  const stream = await openai.responses.create({
+    model,
+    input: adjusted,
+    stream: true,
+    store: false,
+  });
+
+  for await (const chunk of stream) {
+    console.dir(chunk, { depth: Infinity });
+    switch (chunk.type) {
+      case 'response.output_text.delta': {
+        yield chunk.delta;
+        break;
+      }
+      default: {
+        break;
+      }
     }
   }
 }
@@ -192,6 +259,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'o1': openaiStream,
   'o3-mini': openaiStream,
   'o3': openaiStream,
+  'o3-pro': openaiResponseStream,
   'o4-mini': openaiStream,
   'gemini-pro': googleStream,
   'gemini-1.5-pro-latest': googleStream,
