@@ -521,7 +521,7 @@ dialog {
 
       eventSource.onmessage = function(event) {
         let data = event.data;
-        if (data === 'null') {
+        if (data === 'null' || !data) {
           eventSource.close();
           callback();
         } else {

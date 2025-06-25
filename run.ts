@@ -3,7 +3,7 @@ import path from 'node:path';
 import express from 'express';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { GoogleGenAI, type Part as GooglePart, type Content as GoogleContent } from '@google/genai';
+import { GoogleGenAI, type Part as GooglePart, type Content as GoogleContent, HarmBlockThreshold, HarmCategory } from '@google/genai';
 
 let PORT = 21665; // 'gpt' in base 36
 
@@ -124,6 +124,29 @@ async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
     contents: adjusted,
     config: {
       systemInstruction: systemPrompt,
+      // does this do anything? probably not but we might as well try
+      safetySettings: [
+        {
+          category: HarmCategory.HARM_CATEGORY_CIVIC_INTEGRITY,
+          threshold: HarmBlockThreshold.OFF,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+          threshold: HarmBlockThreshold.OFF,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+          threshold: HarmBlockThreshold.OFF,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+          threshold: HarmBlockThreshold.OFF,
+        },
+        {
+          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+          threshold: HarmBlockThreshold.OFF,
+        },
+      ],
     },
   });
   for await (const chunk of response) {
@@ -295,8 +318,10 @@ app.get('/api/stream/:sessionId', async (req, res) => {
 
       let mess = '';
       for await (const chunk of stream) {
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-        mess += chunk;
+        if (chunk) {
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+          mess += chunk;
+        }
       }
       messages.push({
         role: 'assistant',
