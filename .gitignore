@@ -1,6 +1,4 @@
 node_modules
-OPENAI_KEY.txt
-ANTHROPIC_KEY.txt
-GOOGLE_KEY.txt
+*_KEY.txt
 outputs/
 ALLOWED_USERS.txt

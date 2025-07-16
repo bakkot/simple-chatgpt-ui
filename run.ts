@@ -7,9 +7,21 @@ import { GoogleGenAI, type Part as GooglePart, type Content as GoogleContent, Ha
 
 let PORT = 21665; // 'gpt' in base 36
 
-let OPENAI_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'OPENAI_KEY.txt'), 'utf8').trim();
-let ANTHROPIC_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'ANTHROPIC_KEY.txt'), 'utf8').trim();
-let GOOGLE_API_KEY = fs.readFileSync(path.join(import.meta.dirname, 'GOOGLE_KEY.txt'), 'utf8').trim();
+function readKeyOrEmpty(name: string) {
+  try {
+    return fs.readFileSync(path.join(import.meta.dirname, name), 'utf8').trim()
+  } catch (e: any) {
+    if (e.code === 'ENOENT') {
+      return '';
+    }
+    throw e;
+  }
+}
+
+let OPENAI_API_KEY = readKeyOrEmpty('OPENAI_KEY.txt');
+let ANTHROPIC_API_KEY = readKeyOrEmpty('ANTHROPIC_KEY.txt');
+let GOOGLE_API_KEY = readKeyOrEmpty('GOOGLE_KEY.txt');
+let OPENROUTER_API_KEY = readKeyOrEmpty('OPENROUTER_KEY.txt');
 
 let ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
 
@@ -29,6 +41,11 @@ let anthropic = new Anthropic({
 });
 
 let google = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+
+let openrouter = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
+  apiKey: OPENROUTER_API_KEY,
+});
 
 
 let _fail = (e: any) => { throw new Error(e); };
@@ -245,6 +262,23 @@ async function* googleImages({ model, systemPrompt, messages }: StreamArgs) {
   }
 }
 
+async function* openrouterStream({ model, systemPrompt, messages }: StreamArgs) {
+  const adjusted: OpenAI.ChatCompletionMessageParam[] = model in nonSystem
+    ? anthropicToOpenAI(messages)
+    : [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAI(messages)];
+  const stream = await openrouter.chat.completions.create({
+    model,
+    messages: adjusted,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    let tok = chunk.choices[0];
+    if (tok.delta?.content != null) {
+      yield tok.delta.content;
+    }
+  }
+}
 
 let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   // @ts-expect-error ugh
@@ -280,6 +314,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-3-7-sonnet-latest': anthropicStream,
   'claude-sonnet-4-20250514': anthropicStream,
   'claude-opus-4-20250514': anthropicStream,
+  'moonshotai/kimi-k2': openrouterStream,
 };
 
 let nonStream = {
