@@ -170,7 +170,7 @@ async function* openaiResponseStream({ model, systemPrompt, messages }: StreamAr
   });
 
   for await (const chunk of stream) {
-    console.dir(chunk, { depth: Infinity });
+    // console.dir(chunk, { depth: Infinity });
     switch (chunk.type) {
       case 'response.output_text.delta': {
         yield chunk.delta;
@@ -182,6 +182,34 @@ async function* openaiResponseStream({ model, systemPrompt, messages }: StreamAr
     }
   }
 }
+
+// so we can tell it to actually think
+async function* gpt5Stream({ model, systemPrompt, messages }: StreamArgs) {
+  const adjusted: OpenAI.Responses.ResponseInputItem[] = [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAIResponse(messages)];
+  const stream = await openai.responses.create({
+    model,
+    input: adjusted,
+    stream: true,
+    store: false,
+    reasoning: {
+      effort: 'high',
+    },
+  });
+
+  for await (const chunk of stream) {
+    // console.dir(chunk, { depth: Infinity });
+    switch (chunk.type) {
+      case 'response.output_text.delta': {
+        yield chunk.delta;
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+}
+
 
 async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
   const stream = anthropic.messages.stream({
@@ -288,6 +316,8 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gpt-4o': openaiStream,
   'gpt-4.5-preview': openaiStream,
   'chatgpt-4o-latest': openaiStream,
+  'gpt-5-2025-08-07': gpt5Stream,
+  'gpt-5-chat-latest': openaiResponseStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
   'o1': openaiStream,
