@@ -184,15 +184,15 @@ async function* openaiResponseStream({ model, systemPrompt, messages }: StreamAr
 }
 
 // so we can tell it to actually think
-async function* gpt5Stream({ model, systemPrompt, messages }: StreamArgs) {
+const gpt5Stream = (effort: 'minimal' | 'low' | 'medium' | 'high') => async function* ({ model, systemPrompt, messages }: StreamArgs) {
   const adjusted: OpenAI.Responses.ResponseInputItem[] = [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAIResponse(messages)];
   const stream = await openai.responses.create({
-    model,
+    model: 'gpt-5-2025-08-07',
     input: adjusted,
     stream: true,
     store: false,
     reasoning: {
-      effort: 'high',
+      effort,
     },
   });
 
@@ -316,7 +316,8 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gpt-4o': openaiStream,
   'gpt-4.5-preview': openaiStream,
   'chatgpt-4o-latest': openaiStream,
-  'gpt-5-2025-08-07': gpt5Stream,
+  'gpt-5-low': gpt5Stream('low'),
+  'gpt-5-high': gpt5Stream('high'),
   'gpt-5-chat-latest': openaiResponseStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
