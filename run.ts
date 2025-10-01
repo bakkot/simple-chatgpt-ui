@@ -269,15 +269,14 @@ async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
 async function* googleImages({ model, systemPrompt, messages }: StreamArgs) {
   let adjusted = anthropicToGemini(messages);
 
-  const response2 = await google.models.generateContent({
-    model: 'gemini-2.0-flash-exp-image-generation',
+  const response = await google.models.generateContent({
+    model,
     contents: adjusted,
     config: {
       responseModalities: ['Text', 'Image']
     },
   });
-  for (const part of response2.candidates![0].content!.parts!) {
-    // Based on the part type, either show the text or save the image
+  for (const part of response.candidates![0].content!.parts!) {
     if (part.text) {
       yield part.text;
     } else if (part.inlineData) {
@@ -333,6 +332,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gemini-2.0-flash-thinking-exp': googleStream,
   'gemini-2.5-pro-exp-03-25': googleStream,
   'gemini-2.0-flash-exp-image-generation': googleImages,
+  'gemini-2.5-flash-image-preview': googleImages,
   'gemini-2.5-pro-preview-03-25': googleStream,
   'gemini-2.5-pro-preview-05-06': googleStream,
   'gemini-2.5-pro': googleStream,
@@ -344,7 +344,9 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-3-5-sonnet-latest': anthropicStream,
   'claude-3-7-sonnet-latest': anthropicStream,
   'claude-sonnet-4-20250514': anthropicStream,
+  'claude-sonnet-4-5-20250929': anthropicStream,
   'claude-opus-4-20250514': anthropicStream,
+  'claude-opus-4-1-20250805': anthropicStream,
   'moonshotai/kimi-k2': openrouterStream,
 };
 
