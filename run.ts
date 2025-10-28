@@ -211,11 +211,19 @@ const gpt5Stream = (effort: 'minimal' | 'low' | 'medium' | 'high') => async func
 }
 
 
-async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
+let anthropicStreamBase = (thinking: boolean) => async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
+  if (thinking && model.endsWith('-thinking')) {
+    model = model.slice(0, -'-thinking'.length);
+  }
   const stream = anthropic.messages.stream({
     model,
     system: systemPrompt,
     messages,
+    thinking: thinking ? {
+      type: 'enabled',
+      budget_tokens: 10000,
+    } : undefined,
+
     // Include the beta header output-128k-2025-02-19 in your API request to increase the maximum output token length to 128k tokens for Claude 3.7 Sonnet.
     // it complains if it's more than 64000 though
     max_tokens: model.includes('opus') ? 32_000 : 64_000,
@@ -226,7 +234,12 @@ async function* anthropicStream({ model, systemPrompt, messages }: StreamArgs) {
       yield event.delta.text;
     }
   }
-}
+};
+
+let anthropicStream = anthropicStreamBase(false);
+let anthropicThinkingStream = anthropicStreamBase(true);
+
+
 
 async function* googleStream({ model, systemPrompt, messages }: StreamArgs) {
   let adjusted = anthropicToGemini(messages);
@@ -345,6 +358,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-3-7-sonnet-latest': anthropicStream,
   'claude-sonnet-4-20250514': anthropicStream,
   'claude-sonnet-4-5-20250929': anthropicStream,
+  'claude-sonnet-4-5-20250929-thinking': anthropicThinkingStream,
   'claude-opus-4-20250514': anthropicStream,
   'claude-opus-4-1-20250805': anthropicStream,
   'moonshotai/kimi-k2': openrouterStream,
