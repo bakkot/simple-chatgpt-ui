@@ -185,9 +185,12 @@ async function* openaiResponseStream({ model, systemPrompt, messages }: StreamAr
 
 // so we can tell it to actually think
 const gpt5Stream = (effort: 'minimal' | 'low' | 'medium' | 'high') => async function* ({ model, systemPrompt, messages }: StreamArgs) {
+  if (model.endsWith('-' + effort)) {
+    model = model.slice(0, -('-' + effort).length);
+  }
   const adjusted: OpenAI.Responses.ResponseInputItem[] = [{ role: 'system', content: systemPrompt }, ...anthropicToOpenAIResponse(messages)];
   const stream = await openai.responses.create({
-    model: 'gpt-5-2025-08-07',
+    model,
     input: adjusted,
     stream: true,
     store: false,
@@ -357,6 +360,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-3-5-sonnet-latest': anthropicStream,
   'claude-3-7-sonnet-latest': anthropicStream,
   'claude-sonnet-4-20250514': anthropicStream,
+  'claude-haiku-4-5-20251001': anthropicStream,
   'claude-sonnet-4-5-20250929': anthropicStream,
   'claude-sonnet-4-5-20250929-thinking': anthropicThinkingStream,
   'claude-opus-4-20250514': anthropicStream,
