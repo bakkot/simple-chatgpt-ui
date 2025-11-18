@@ -355,6 +355,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gemini-2.5-flash-preview-04-17': googleStream,
   'gemini-2.5-flash-preview-05-20': googleStream,
   'gemini-2.5-flash': googleStream,
+  'gemini-3-pro-preview': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
   'claude-3-opus-20240229': anthropicStream,
   'claude-3-5-sonnet-latest': anthropicStream,
