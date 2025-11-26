@@ -367,6 +367,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-sonnet-4-5-20250929-thinking': anthropicThinkingStream,
   'claude-opus-4-20250514': anthropicStream,
   'claude-opus-4-1-20250805': anthropicStream,
+  'claude-opus-4-5-20251101': anthropicStream,
   'moonshotai/kimi-k2': openrouterStream,
 };
 
