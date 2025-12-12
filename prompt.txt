@@ -1,0 +1,25 @@
+This is a typescript/express project for interacting with chatbots. Currently it is built around a synchronous, back-and-forth paradigm, in `index.html` (which you can largely ignore, except to take styling cues). I want a new page, `research.html`, for interactions with long-running background agents. The first of these is Google's new "deep-research". Example use of that API is in `sample-research.mjs`.
+
+The new page should have a box at the bottom where you enter your query, and a sidebar (on the left) with previous queries. It should keep track of state for each query: running or finished. These should be visually distinct in the sidebar. Clicking on a query should show your prompt and the response in the main part of the page. For running queries, the response should be updated as results come in, either by using a SSE or polling. The server should continue handling responses from the agent even if the page disconnects.
+
+All conversations should be serialized to localstorage and recreated when the page is re-opened. This includes the running/finished state. When the page is opened, it should query the server for any running queries and re-connect to get live updates (being sure to also get any updates which happened while the page was closed). This will require keeping track of the `event_id`s on the client, and for the server to keep a history of events with their corresponding `event_id`s so that it can replay them for the client on reconnect. Note that the server may have finished while the page was closed; handle that case as well.
+
+Note that there may be multiple clients active at a time, each of which may be making multiple queries at a time. Handle this appropriately. For now, just have the client generate a random UUID when the page opens for the first time (stored in localstorage); later we'll make actual users.
+
+For the backend, make a new (typescript+express) app, roughly following style of the existing `run.ts`. We'll merge it into a single server eventually but it's easier to test independently for now.
+
+For the frontend, keep styling to a minimum. Match styling of `index.html` where feasible but deviate as necessary to follow the above design (e.g. index.html does not have a sidebar). Put the JS for the frontend in a separate `.ts` file, loaded from the HTML page, and use the following pattern for serving `.ts` files:
+
+```js
+import { stripTypeScriptTypes } from 'node:module';
+
+// in the express handler:
+  const ext = path.extname(resolvedPath).toLowerCase();
+  if (ext === '.ts') {
+    const content = fs.readFileSync(resolvedPath, 'utf8');
+    res.type('text/javascript');
+    res.send(stripTypeScriptTypes(content, { mode: 'transform' }));
+  }
+```
+
+We're not going to worry about losing state when the server goes down; no need to serialize anything to disk. If the client re-connects and asks about a running query which the server doesn't recognize, respond appropriately and surface this info to the user rather than throwing an exception.

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<title>Deep Research</title>
+<style>
+:root {
+  --text-color: #404040;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: system,-apple-system,system-ui,BlinkMacSystemFont,sans-serif;
+  color: var(--text-color);
+  font-size: 1.2rem;
+}
+.container {
+  display: flex;
+  height: 100%;
+}
+.sidebar {
+  width: 300px;
+  border-right: 1px solid #aaa;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar-header {
+  padding: 1rem;
+  border-bottom: 1px solid #aaa;
+  font-weight: bold;
+}
+.query-item {
+  padding: 1rem;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.query-item:hover {
+  background: #f7f7f7;
+}
+.query-item.selected {
+  background: #e7e7e7;
+}
+.query-status {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.query-status.running {
+  background: #fff4e6;
+  color: #ff8c00;
+}
+.query-status.finished {
+  background: #e6f7ff;
+  color: #0066cc;
+}
+.query-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  max-width: 60rem;
+  width: 100%;
+  margin: 0 auto;
+}
+.message-container {
+  margin-bottom: 2rem;
+}
+.message-label {
+  color: #777;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+.message-content {
+  line-height: 1.5;
+}
+.user-message {
+  white-space: pre-wrap;
+  padding: 1rem;
+  background: #f7f7f7;
+  border-radius: 5px;
+}
+.bot-message {
+  padding: 1rem;
+}
+.thought-summary {
+  color: #666;
+  font-style: italic;
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  background: #f9f9f9;
+  border-left: 3px solid #ddd;
+}
+.bottom {
+  border-top: 1px solid #aaa;
+  padding: 1rem 2rem;
+  max-width: 60rem;
+  width: 100%;
+  margin: 0 auto;
+}
+.input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-wrapper {
+  border-radius: 5px;
+  padding: 0.8rem;
+  border: 1px solid #aaa;
+  box-shadow: 0px 0px 10px #aaa;
+  flex: 1;
+}
+.input:focus {
+  outline: none;
+}
+.send-button-container {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0.3rem;
+  display: flex;
+  align-items: center;
+}
+.send-button {
+  background: inherit;
+  border: none;
+  font-size: 1.6rem;
+  border-radius: 5px;
+  line-height: 1;
+  cursor: pointer;
+}
+.send-button:hover {
+  background: #ddd;
+}
+.send-button:active {
+  margin-top: 2px;
+}
+.grow-wrap {
+  display: grid;
+  width: 100%;
+}
+.grow-wrap::after {
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  visibility: hidden;
+}
+.grow-wrap > textarea {
+  resize: none;
+  overflow: hidden;
+}
+.grow-wrap > textarea,
+.grow-wrap::after {
+  padding: 0.5rem;
+  border-radius: 5px;
+  border: none;
+  width: 95%;
+  font: inherit;
+  font-size: 1.2rem;
+  grid-area: 1 / 1 / 2 / 2;
+}
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 1.5rem;
+}
+</style>
+<body>
+<div class="container">
+  <div class="sidebar">
+    <div class="sidebar-header">History</div>
+    <div id="query-list"></div>
+  </div>
+  <div class="main-content">
+    <div class="messages" id="messages">
+      <div class="empty-state">Enter a query below to start. This takes a long time.<br>State persists on the server, so feel free to close the page and come back.<br>History is on the left.</div>
+    </div>
+    <div class="bottom">
+      <div class="input-container">
+        <div class="input-wrapper">
+          <div class="grow-wrap">
+            <textarea class="input" id="input" rows="1" autofocus placeholder="Enter your research query..."></textarea>
+          </div>
+        </div>
+        <div class="send-button-container">
+          <button class="send-button" id="send-button">✉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module" src="/research-client.ts"></script>
+</body>
+</html>

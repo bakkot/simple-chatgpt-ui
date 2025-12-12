@@ -4,6 +4,9 @@ import express from 'express';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI, type Part as GooglePart, type Content as GoogleContent, HarmBlockThreshold, HarmCategory } from '@google/genai';
+import { stripTypeScriptTypes } from 'node:module';
+
+import { addResearchEndpoints } from './research-server.ts';
 
 let PORT = 21665; // 'gpt' in base 36
 
@@ -23,7 +26,7 @@ let ANTHROPIC_API_KEY = readKeyOrEmpty('ANTHROPIC_KEY.txt');
 let GOOGLE_API_KEY = readKeyOrEmpty('GOOGLE_KEY.txt');
 let OPENROUTER_API_KEY = readKeyOrEmpty('OPENROUTER_KEY.txt');
 
-let ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
+export const ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
 
 let outdir = path.join(import.meta.dirname, 'outputs');
 fs.mkdirSync(outdir, { recursive: true });
@@ -419,6 +422,24 @@ app.get('/tokenize-bundled.js', function (req, res) {
   res.setHeader('content-type', 'text/javascript');
   res.sendFile(path.join(import.meta.dirname, 'tokenize-bundled.js'));
 });
+app.get('/*.ts', function (req, res) {
+  const filePath = path.join(import.meta.dirname, req.path);
+  const resolvedPath = path.resolve(filePath);
+
+  if (!resolvedPath.startsWith(import.meta.dirname + path.sep)) {
+    res.status(403).send('Forbidden');
+    return;
+  }
+
+  if (!fs.existsSync(resolvedPath)) {
+    res.status(404).send('Not found');
+    return;
+  }
+
+  const content = fs.readFileSync(resolvedPath, 'utf8');
+  res.type('text/javascript');
+  res.send(stripTypeScriptTypes(content, { mode: 'transform' }));
+});
 app.post('/check-user', (req, res) => {
   let { user } = req.body;
   if (ALLOWED_USERS.includes(user)) {
@@ -510,6 +531,8 @@ app.get('/api/stream/:sessionId', async (req, res) => {
     res.end();
   }
 });
+
+addResearchEndpoints(app, google);
 
 app.listen(PORT);
 console.log(`Listening at http://localhost:${PORT}`);

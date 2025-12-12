@@ -2,3 +2,4 @@ node_modules
 *_KEY.txt
 outputs/
 ALLOWED_USERS.txt
+.claude
