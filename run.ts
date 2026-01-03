@@ -338,6 +338,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gpt-5-high': gpt5Stream('high'),
   'gpt-5.2-low': gpt5Stream('low'),
   'gpt-5-chat-latest': openaiResponseStream,
+  'gpt-5.2-chat-latest': openaiResponseStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
   'o1': openaiStream,
