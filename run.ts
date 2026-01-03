@@ -336,6 +336,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'chatgpt-4o-latest': openaiStream,
   'gpt-5-low': gpt5Stream('low'),
   'gpt-5-high': gpt5Stream('high'),
+  'gpt-5.2-low': gpt5Stream('low'),
   'gpt-5-chat-latest': openaiResponseStream,
   'o1-mini': openaiStream,
   'o1-preview': openaiStream,
@@ -358,6 +359,7 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'gemini-2.5-flash-preview-04-17': googleStream,
   'gemini-2.5-flash-preview-05-20': googleStream,
   'gemini-2.5-flash': googleStream,
+  'gemini-3-flash-preview': googleStream,
   'gemini-3-pro-image-preview': googleImages,
   'gemini-3-pro-preview': googleStream,
   'claude-3-haiku-20240307': anthropicStream,
@@ -368,10 +370,12 @@ let models: Record<string, (args: StreamArgs) => AsyncIterable<string>> = {
   'claude-haiku-4-5-20251001': anthropicStream,
   'claude-sonnet-4-5-20250929': anthropicStream,
   'claude-sonnet-4-5-20250929-thinking': anthropicThinkingStream,
+  'claude-opus-4-5-20251101-thinking': anthropicThinkingStream,
   'claude-opus-4-20250514': anthropicStream,
   'claude-opus-4-1-20250805': anthropicStream,
   'claude-opus-4-5-20251101': anthropicStream,
   'moonshotai/kimi-k2': openrouterStream,
+  'moonshotai/kimi-k2-0905': openrouterStream,
 };
 
 let nonStream = {
