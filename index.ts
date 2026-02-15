@@ -67,6 +67,57 @@ for (const radio of modelRadios) {
 }
 renderModelConfig();
 
+// --- Streaming display helpers ---
+
+type StreamingUI = {
+  container: HTMLDivElement;
+  textSpan: HTMLSpanElement | null;
+  thinkingDetails: HTMLDetailsElement | null;
+  thinkingContent: HTMLElement | null;
+};
+
+function createStreamingUI(): StreamingUI {
+  return {
+    container: appendMessageDiv('assistant'),
+    textSpan: null,
+    thinkingDetails: null,
+    thinkingContent: null,
+  };
+}
+
+function appendText(ui: StreamingUI, text: string) {
+  if (!ui.textSpan) {
+    ui.textSpan = document.createElement('span');
+    ui.container.appendChild(ui.textSpan);
+  }
+  ui.textSpan.textContent += text;
+  scrollToBottom();
+}
+
+function appendThinking(ui: StreamingUI, text: string) {
+  if (!ui.thinkingDetails) {
+    ui.thinkingDetails = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = 'Thinking...';
+    ui.thinkingDetails.appendChild(summary);
+    ui.thinkingContent = document.createElement('pre');
+    ui.thinkingContent.style.whiteSpace = 'pre-wrap';
+    ui.thinkingContent.style.fontSize = '13px';
+    ui.thinkingDetails.appendChild(ui.thinkingContent);
+    ui.container.appendChild(ui.thinkingDetails);
+  }
+  ui.thinkingContent!.textContent += text;
+  scrollToBottom();
+}
+
+function showError(container: HTMLElement, message: string) {
+  const errSpan = document.createElement('span');
+  errSpan.style.color = 'red';
+  errSpan.textContent = message;
+  container.appendChild(errSpan);
+  scrollToBottom();
+}
+
 // --- UI helpers ---
 
 function scrollToBottom() {
@@ -122,10 +173,7 @@ async function sendMessage() {
 // --- Stream ---
 
 async function streamChat(formData: FormData) {
-  const assistantDiv = appendMessageDiv('assistant');
-  let textSpan: HTMLSpanElement | null = null;
-  let thinkingDetails: HTMLDetailsElement | null = null;
-  let thinkingContent: HTMLElement | null = null;
+  const ui = createStreamingUI();
 
   try {
     const resp = await fetch('/chat', {
@@ -156,30 +204,13 @@ async function streamChat(formData: FormData) {
             if (raw.type === 'content_block_delta') {
               const delta = raw.delta;
               if (delta.type === 'text_delta') {
-                if (!textSpan) {
-                  textSpan = document.createElement('span');
-                  assistantDiv.appendChild(textSpan);
-                }
-                textSpan.textContent += delta.text;
-                scrollToBottom();
+                appendText(ui, delta.text);
               } else if (delta.type === 'thinking_delta') {
-                if (!thinkingDetails) {
-                  thinkingDetails = document.createElement('details');
-                  const summary = document.createElement('summary');
-                  summary.textContent = 'Thinking...';
-                  thinkingDetails.appendChild(summary);
-                  thinkingContent = document.createElement('pre');
-                  thinkingContent.style.whiteSpace = 'pre-wrap';
-                  thinkingContent.style.fontSize = '13px';
-                  thinkingDetails.appendChild(thinkingContent);
-                  assistantDiv.appendChild(thinkingDetails);
-                }
-                thinkingContent!.textContent += delta.thinking;
-                scrollToBottom();
+                appendThinking(ui, delta.thinking);
               }
             } else if (raw.type === 'content_block_start') {
               if (raw.content_block?.type === 'text') {
-                textSpan = null;
+                ui.textSpan = null;
               }
             }
             break;
@@ -188,26 +219,9 @@ async function streamChat(formData: FormData) {
           case 'openai': {
             const raw = event.event;
             if (raw.type === 'response.output_text.delta') {
-              if (!textSpan) {
-                textSpan = document.createElement('span');
-                assistantDiv.appendChild(textSpan);
-              }
-              textSpan.textContent += raw.delta;
-              scrollToBottom();
+              appendText(ui, raw.delta);
             } else if (raw.type === 'response.reasoning_text.delta') {
-              if (!thinkingDetails) {
-                thinkingDetails = document.createElement('details');
-                const summary = document.createElement('summary');
-                summary.textContent = 'Thinking...';
-                thinkingDetails.appendChild(summary);
-                thinkingContent = document.createElement('pre');
-                thinkingContent.style.whiteSpace = 'pre-wrap';
-                thinkingContent.style.fontSize = '13px';
-                thinkingDetails.appendChild(thinkingContent);
-                assistantDiv.appendChild(thinkingDetails);
-              }
-              thinkingContent!.textContent += raw.delta;
-              scrollToBottom();
+              appendThinking(ui, raw.delta);
             }
             break;
           }
@@ -218,7 +232,6 @@ async function streamChat(formData: FormData) {
               anthropicHistory.push({ role: 'assistant', content: event.assistantMessage.content });
             } else {
               openaiHistory.push(event.userInput);
-              // Push output items from the response into history for multi-turn
               for (const item of event.assistantMessage.output) {
                 openaiHistory.push(item);
               }
@@ -227,31 +240,20 @@ async function streamChat(formData: FormData) {
           }
 
           case 'error': {
-            const errSpan = document.createElement('span');
-            errSpan.style.color = 'red';
-            errSpan.textContent = `Error: ${event.error}`;
-            assistantDiv.appendChild(errSpan);
-            scrollToBottom();
+            showError(ui.container, `Error: ${event.error}`);
             break;
           }
 
           default: {
-            event satisfies never; // assert switch exhaustiveness
-            const errSpan = document.createElement('span');
-            errSpan.style.color = 'red';
-            errSpan.textContent = `Error: got bad message type ${(event as { type: string }).type}`;
-            assistantDiv.appendChild(errSpan);
-            scrollToBottom();
+            event satisfies never;
+            showError(ui.container, `Error: got bad message type ${(event as { type: string }).type}`);
             break;
           }
         }
       }
     }
   } catch (err: any) {
-    const errSpan = document.createElement('span');
-    errSpan.style.color = 'red';
-    errSpan.textContent = `Error: ${err.message}`;
-    assistantDiv.appendChild(errSpan);
+    showError(ui.container, `Error: ${err.message}`);
   }
 }
 
