@@ -15,8 +15,15 @@
   #send { padding: 8px 16px; border: none; background: #333; color: white; border-radius: 4px; cursor: pointer; }
   #send:disabled { opacity: 0.5; cursor: not-allowed; }
   #files { font-size: 13px; }
+  #model-selection { padding: 8px 12px; border-bottom: 1px solid #ddd; }
+  #model-config { padding: 4px 12px 8px; border-bottom: 1px solid #ddd; font-size: 13px; }
 </style>
 
+<div id="model-selection">
+  <label><input type="radio" name="model" value="claude-sonnet-4-5" checked> Claude Sonnet 4.5</label>
+  <label><input type="radio" name="model" value="gpt-5"> GPT-5</label>
+</div>
+<div id="model-config"></div>
 <div id="messages"></div>
 <div id="input-area">
   <textarea id="message" class="input" rows="1" autofocus></textarea>

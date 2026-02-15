@@ -31,23 +31,42 @@ const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
 
-export type MessageParam = Anthropic.MessageParam;
-export type Message = Anthropic.Message;
+// --- Anthropic types ---
+export type AnthropicMessageParam = Anthropic.MessageParam;
+export type AnthropicMessage = Anthropic.Message;
+export type AnthropicHistory = AnthropicMessageParam[];
 
-export type ChatConfig =
-  | {
-    model: 'claude-sonnet-4-5';
-    system?: string;
-    thinking?: boolean;
-    max_tokens?: number;
-  };
+// --- OpenAI types ---
+export type OpenAIInputItem = OpenAI.Responses.ResponseInputItem;
+export type OpenAIResponse = OpenAI.Responses.Response;
+export type OpenAIHistory = OpenAIInputItem[];
 
+// --- Config ---
+export type AnthropicConfig = {
+  model: 'claude-sonnet-4-5';
+  system?: string;
+  thinking?: boolean;
+  max_tokens?: number;
+};
+
+export type OpenAIConfig = {
+  model: 'gpt-5';
+};
+
+export type ChatConfig = AnthropicConfig | OpenAIConfig;
+
+// --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: Anthropic.RawMessageStreamEvent };
-export type DoneEvent = { type: 'done'; userMessage: MessageParam; assistantMessage: Message };
+export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
+export type DoneEvent =
+  | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage }
+  | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse };
 export type ErrorEvent = { type: 'error'; error: string };
-export type StreamEvent = AnthropicEvent | DoneEvent | ErrorEvent;
+export type StreamEvent = AnthropicEvent | OpenAIEvent | DoneEvent | ErrorEvent;
 
-function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
+// --- Anthropic ---
+
+function buildAnthropicUserMessage(text: string, files: Express.Multer.File[]): AnthropicMessageParam {
   if (files.length === 0) {
     return { role: 'user', content: text };
   }
@@ -78,14 +97,14 @@ function buildUserMessage(text: string, files: Express.Multer.File[]): MessagePa
 }
 
 async function streamAnthropicChat(
-  messages: MessageParam[],
+  messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: ChatConfig,
+  config: AnthropicConfig,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
-    const userMessage = buildUserMessage(text, files);
+    const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
     const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
@@ -105,11 +124,72 @@ async function streamAnthropicChat(
     }
 
     const assistantMessage = await stream.finalMessage();
-    send({ type: 'done', userMessage, assistantMessage });
+    send({ type: 'done', provider: 'anthropic', userMessage, assistantMessage });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });
   }
 }
+
+// --- OpenAI ---
+
+function buildOpenAIUserInput(text: string, files: Express.Multer.File[]): OpenAIInputItem {
+  if (files.length === 0) {
+    return { role: 'user', content: text };
+  }
+
+  const content: OpenAI.Responses.ResponseInputContent[] = [];
+  for (const file of files) {
+    const base64 = file.buffer.toString('base64');
+    if (file.mimetype.startsWith('image/')) {
+      content.push({
+        type: 'input_image',
+        image_url: `data:${file.mimetype};base64,${base64}`,
+        detail: 'auto',
+      });
+    } else {
+      content.push({
+        type: 'input_file',
+        file_data: `data:${file.mimetype};base64,${base64}`,
+      });
+    }
+  }
+
+  if (text) {
+    content.push({ type: 'input_text', text });
+  }
+
+  return { role: 'user', content };
+}
+
+async function streamOpenAIChat(
+  input: OpenAIHistory,
+  text: string,
+  files: Express.Multer.File[],
+  config: OpenAIConfig,
+  send: (event: StreamEvent) => void,
+): Promise<void> {
+  try {
+    const userInput = buildOpenAIUserInput(text, files);
+    input.push(userInput);
+
+    const stream = await openai.responses.stream({
+      model: config.model,
+      input,
+    });
+
+    for await (const event of stream) {
+      send({ type: 'openai', event });
+    }
+
+    const assistantMessage = await stream.finalResponse();
+    console.dir({ assistantMessage }, { depth: Infinity });
+    send({ type: 'done', provider: 'openai', userInput, assistantMessage });
+  } catch (err: any) {
+    send({ type: 'error', error: err.message ?? String(err) });
+  }
+}
+
+// --- Express ---
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -146,7 +226,6 @@ app.post('/check-user', (req, res) => {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 app.post('/chat', upload.array('files'), async (req, res) => {
-  const messages: MessageParam[] = JSON.parse(req.body.messages);
   const config: ChatConfig = JSON.parse(req.body.config);
   const text: string = req.body.text || '';
   const files = (req.files as Express.Multer.File[]) || [];
@@ -160,7 +239,14 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
-  await streamAnthropicChat(messages, text, files, config, send);
+  if (config.model === 'claude-sonnet-4-5') {
+    const messages: AnthropicHistory = JSON.parse(req.body.messages);
+    await streamAnthropicChat(messages, text, files, config, send);
+  } else {
+    const messages: OpenAIHistory = JSON.parse(req.body.messages);
+    await streamOpenAIChat(messages, text, files, config, send);
+  }
+
   res.end();
 });
 

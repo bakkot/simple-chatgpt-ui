@@ -1,17 +1,73 @@
-import type { MessageParam, ChatConfig, StreamEvent } from './run.ts';
+import type {
+  AnthropicHistory, AnthropicMessageParam,
+  OpenAIHistory, OpenAIInputItem, OpenAIResponse,
+  AnthropicConfig, OpenAIConfig, ChatConfig, StreamEvent,
+} from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
 const textarea = document.getElementById('message') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send') as HTMLButtonElement;
 const filesInput = document.getElementById('files') as HTMLInputElement;
+const modelSelectionDiv = document.getElementById('model-selection')!;
+const modelConfigDiv = document.getElementById('model-config')!;
+const modelRadios = document.querySelectorAll<HTMLInputElement>('input[name="model"]');
 
-const conversationHistory: MessageParam[] = [];
+// --- Per-provider conversation history ---
+// Only one is active at a time; which one depends on the selected model.
+let anthropicHistory: AnthropicHistory = [];
+let openaiHistory: OpenAIHistory = [];
+let hasSentMessage = false;
 
-const config: ChatConfig = {
-  model: 'claude-sonnet-4-5',
-  thinking: true,
-  max_tokens: 16384,
-};
+function getSelectedModel(): ChatConfig['model'] {
+  const checked = document.querySelector<HTMLInputElement>('input[name="model"]:checked');
+  return (checked?.value ?? 'claude-sonnet-4-5') as ChatConfig['model'];
+}
+
+function getConfig(): ChatConfig {
+  const model = getSelectedModel();
+  if (model === 'claude-sonnet-4-5') {
+    const thinkingCheckbox = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
+    return {
+      model,
+      thinking: thinkingCheckbox?.checked ?? true,
+      max_tokens: 16384,
+    } satisfies AnthropicConfig;
+  }
+  return { model } satisfies OpenAIConfig;
+}
+
+function getHistory(): AnthropicHistory | OpenAIHistory {
+  const model = getSelectedModel();
+  if (model === 'claude-sonnet-4-5') return anthropicHistory;
+  return openaiHistory;
+}
+
+// --- Model config UI ---
+
+function renderModelConfig() {
+  const model = getSelectedModel();
+  if (model === 'claude-sonnet-4-5') {
+    modelConfigDiv.innerHTML = '<label><input type="checkbox" id="anthropic-thinking" checked> Thinking</label>';
+  } else {
+    modelConfigDiv.innerHTML = '';
+  }
+}
+
+function lockModelSelection() {
+  if (!hasSentMessage) {
+    hasSentMessage = true;
+    for (const radio of modelRadios) {
+      radio.disabled = true;
+    }
+  }
+}
+
+for (const radio of modelRadios) {
+  radio.addEventListener('change', renderModelConfig);
+}
+renderModelConfig();
+
+// --- UI helpers ---
 
 function scrollToBottom() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -28,6 +84,8 @@ function appendMessageDiv(role: 'user' | 'assistant'): HTMLDivElement {
   return div;
 }
 
+// --- Send ---
+
 async function sendMessage() {
   const text = textarea.value.trim();
   const files = filesInput.files;
@@ -35,6 +93,7 @@ async function sendMessage() {
 
   sendBtn.disabled = true;
   textarea.value = '';
+  lockModelSelection();
 
   // Display user message
   const userDiv = appendMessageDiv('user');
@@ -43,10 +102,10 @@ async function sendMessage() {
   userDiv.appendChild(userText);
   scrollToBottom();
 
-  // Build FormData — server handles file reading and content block construction
+  // Build FormData
   const formData = new FormData();
-  formData.append('messages', JSON.stringify(conversationHistory));
-  formData.append('config', JSON.stringify(config));
+  formData.append('messages', JSON.stringify(getHistory()));
+  formData.append('config', JSON.stringify(getConfig()));
   formData.append('text', text);
   if (files) {
     for (const file of Array.from(files)) {
@@ -55,11 +114,12 @@ async function sendMessage() {
   }
   filesInput.value = '';
 
-  // Stream assistant response
   await streamChat(formData);
   sendBtn.disabled = false;
   textarea.focus();
 }
+
+// --- Stream ---
 
 async function streamChat(formData: FormData) {
   const assistantDiv = appendMessageDiv('assistant');
@@ -118,7 +178,6 @@ async function streamChat(formData: FormData) {
                 scrollToBottom();
               }
             } else if (raw.type === 'content_block_start') {
-              // Reset spans when a new text block starts so multiple text blocks render separately
               if (raw.content_block?.type === 'text') {
                 textSpan = null;
               }
@@ -126,9 +185,44 @@ async function streamChat(formData: FormData) {
             break;
           }
 
+          case 'openai': {
+            const raw = event.event;
+            if (raw.type === 'response.output_text.delta') {
+              if (!textSpan) {
+                textSpan = document.createElement('span');
+                assistantDiv.appendChild(textSpan);
+              }
+              textSpan.textContent += raw.delta;
+              scrollToBottom();
+            } else if (raw.type === 'response.reasoning_text.delta') {
+              if (!thinkingDetails) {
+                thinkingDetails = document.createElement('details');
+                const summary = document.createElement('summary');
+                summary.textContent = 'Thinking...';
+                thinkingDetails.appendChild(summary);
+                thinkingContent = document.createElement('pre');
+                thinkingContent.style.whiteSpace = 'pre-wrap';
+                thinkingContent.style.fontSize = '13px';
+                thinkingDetails.appendChild(thinkingContent);
+                assistantDiv.appendChild(thinkingDetails);
+              }
+              thinkingContent!.textContent += raw.delta;
+              scrollToBottom();
+            }
+            break;
+          }
+
           case 'done': {
-            conversationHistory.push(event.userMessage);
-            conversationHistory.push({ role: 'assistant', content: event.assistantMessage.content });
+            if (event.provider === 'anthropic') {
+              anthropicHistory.push(event.userMessage);
+              anthropicHistory.push({ role: 'assistant', content: event.assistantMessage.content });
+            } else {
+              openaiHistory.push(event.userInput);
+              // Push output items from the response into history for multi-turn
+              for (const item of event.assistantMessage.output) {
+                openaiHistory.push(item);
+              }
+            }
             break;
           }
 
