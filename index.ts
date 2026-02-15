@@ -1,7 +1,7 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  Sonnet45Config, GPT5Config, ChatConfig, ChatRequest, StreamEvent,
+  Sonnet45Config, Opus46Config, GPT5Config, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -28,23 +28,33 @@ function getSelectedModel(): ChatConfig['model'] {
 function getChatRequest(text: string): ChatRequest {
   saveModelConfig();
   const model = getSelectedModel();
-  if (model === 'claude-sonnet-4-5') {
-    return {
-      messages: anthropicHistory,
-      config: { model, ...configState[model] },
-      text,
-    };
+  switch (model) {
+    case 'claude-sonnet-4-5':
+    case 'claude-opus-4-6': {
+      return {
+        messages: anthropicHistory,
+        config: { model, ...configState[model] },
+        text,
+      } as ChatRequest;
+    }
+    case 'gpt-5': {
+      return {
+        messages: openaiHistory,
+        config: { model, ...configState[model] },
+        text,
+      };
+    }
+    default: {
+      model satisfies never; // assert switch exhaustiveness
+      throw new Error(`unknown model ${model}`);
+    }
   }
-  return {
-    messages: openaiHistory,
-    config: { model, ...configState[model] },
-    text,
-  };
 }
 
 // --- Model config UI ---
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384 },
+  'claude-opus-4-6': {},
   'gpt-5': {},
 };
 
@@ -378,7 +388,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
           }
 
           default: {
-            event satisfies never;
+            event satisfies never; // assert switch exhaustiveness
             showError(ui.container, `Error: got bad message type ${(event as { type: string }).type}`);
             break;
           }

@@ -49,15 +49,20 @@ export type Sonnet45Config = {
   max_tokens?: number;
 };
 
+export type Opus46Config = {
+  model: 'claude-opus-4-6';
+};
+
 export type GPT5Config = {
   model: 'gpt-5';
 };
 
-export type ChatConfig = Sonnet45Config | GPT5Config;
+export type ChatConfig = Sonnet45Config | Opus46Config | GPT5Config;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
+  | { messages: AnthropicHistory; config: Opus46Config; text: string }
   | { messages: OpenAIHistory; config: GPT5Config; text: string };
 
 // --- Stream events ---
@@ -105,22 +110,23 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet45Config,
+  config: Sonnet45Config | Opus46Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
     const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
-    const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
-      ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
+    const maxTokens = ('max_tokens' in config ? config.max_tokens : undefined) ?? 16384;
+    const thinkingConfig: Anthropic.ThinkingConfigParam = ('thinking' in config && config.thinking)
+      ? { type: 'enabled', budget_tokens: Math.max(1024, maxTokens - 1) }
       : { type: 'disabled' };
 
     const stream = anthropic.messages.stream({
       model: config.model,
-      max_tokens: config.max_tokens ?? 16384,
+      max_tokens: maxTokens,
       messages,
-      system: config.system || undefined,
+      system: ('system' in config ? config.system : undefined) || undefined,
       thinking: thinkingConfig,
     });
 
@@ -247,10 +253,20 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
-  if (chat.config.model === 'claude-sonnet-4-5') {
-    await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
-  } else {
-    await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
+  switch (chat.config.model) {
+    case 'claude-sonnet-4-5':
+    case 'claude-opus-4-6': {
+      await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
+      break;
+    }
+    case 'gpt-5': {
+      await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
+      break;
+    }
+    default: {
+      chat.config satisfies never; // assert switch exhaustiveness
+      throw new Error(`unknown model ${(chat.config as { model: string }).model}`);
+    }
   }
 
   res.end();
