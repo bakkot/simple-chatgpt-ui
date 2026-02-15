@@ -28,57 +28,6 @@ function appendMessageDiv(role: 'user' | 'assistant'): HTMLDivElement {
   return div;
 }
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // strip data:...;base64, prefix
-      resolve(result.split(',')[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-type UserBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; source: { type: 'base64'; media_type: ImageMediaType; data: string } }
-  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } };
-
-async function buildUserContent(text: string, files: FileList | null): Promise<string | UserBlock[]> {
-  if (!files || files.length === 0) {
-    return text;
-  }
-
-  const blocks: UserBlock[] = [];
-  for (const file of Array.from(files)) {
-    const base64 = await readFileAsBase64(file);
-    if (file.type.startsWith('image/')) {
-      blocks.push({
-        type: 'image',
-        source: { type: 'base64', media_type: file.type as ImageMediaType, data: base64 },
-      });
-    } else if (file.type === 'application/pdf') {
-      blocks.push({
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-      });
-    } else {
-      // For non-image, non-PDF files, read as text and include inline
-      const textContent = atob(base64);
-      blocks.push({ type: 'text', text: `[File: ${file.name}]\n${textContent}` });
-    }
-  }
-
-  if (text) {
-    blocks.push({ type: 'text', text });
-  }
-
-  return blocks;
-}
-
 async function sendMessage() {
   const text = textarea.value.trim();
   const files = filesInput.files;
@@ -87,12 +36,6 @@ async function sendMessage() {
   sendBtn.disabled = true;
   textarea.value = '';
 
-  const content = await buildUserContent(text, files);
-  filesInput.value = '';
-
-  const userMessage: Message = { role: 'user', content };
-  conversationHistory.push(userMessage);
-
   // Display user message
   const userDiv = appendMessageDiv('user');
   const userText = document.createElement('span');
@@ -100,13 +43,25 @@ async function sendMessage() {
   userDiv.appendChild(userText);
   scrollToBottom();
 
+  // Build FormData — server handles file reading and content block construction
+  const formData = new FormData();
+  formData.append('messages', JSON.stringify(conversationHistory));
+  formData.append('config', JSON.stringify(config));
+  formData.append('text', text);
+  if (files) {
+    for (const file of Array.from(files)) {
+      formData.append('files', file);
+    }
+  }
+  filesInput.value = '';
+
   // Stream assistant response
-  await streamChat();
+  await streamChat(formData);
   sendBtn.disabled = false;
   textarea.focus();
 }
 
-async function streamChat() {
+async function streamChat(formData: FormData) {
   const assistantDiv = appendMessageDiv('assistant');
   let textSpan: HTMLSpanElement | null = null;
   let thinkingDetails: HTMLDetailsElement | null = null;
@@ -115,8 +70,7 @@ async function streamChat() {
   try {
     const resp = await fetch('/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: conversationHistory, config }),
+      body: formData,
     });
 
     const reader = resp.body!.getReader();
@@ -164,7 +118,8 @@ async function streamChat() {
             break;
 
           case 'done':
-            conversationHistory.push(event.message);
+            conversationHistory.push(event.userMessage);
+            conversationHistory.push(event.assistantMessage);
             break;
 
           case 'error':

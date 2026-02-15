@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
+import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import { stripTypeScriptTypes } from 'node:module';
 
@@ -37,7 +38,7 @@ export type ChatConfig = {
 export type SSEEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'thinking_delta'; thinking: string }
-  | { type: 'done'; message: Message }
+  | { type: 'done'; userMessage: Message; assistantMessage: Message }
   | { type: 'error'; error: string };
 
 async function streamAnthropicChat(
@@ -81,8 +82,7 @@ async function streamAnthropicChat(
     }
   });
 
-  const assistantMessage: Message = { role: 'assistant', content: contentParams };
-  send({ type: 'done', message: assistantMessage });
+  return { role: 'assistant' as const, content: contentParams } satisfies Message;
 }
 
 const app = express();
@@ -117,8 +117,46 @@ app.post('/check-user', (req, res) => {
   }
 });
 
-app.post('/chat', async (req, res) => {
-  const { messages, config } = req.body as { messages: Message[]; config: ChatConfig };
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+function buildUserMessage(text: string, files: Express.Multer.File[]): Message {
+  if (files.length === 0) {
+    return { role: 'user', content: text };
+  }
+
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const file of files) {
+    const base64 = file.buffer.toString('base64');
+    if (file.mimetype.startsWith('image/')) {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: file.mimetype as 'image/jpeg', data: base64 },
+      });
+    } else if (file.mimetype === 'application/pdf') {
+      blocks.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+      });
+    } else {
+      blocks.push({ type: 'text', text: `[File: ${file.originalname}]\n${file.buffer.toString('utf8')}` });
+    }
+  }
+
+  if (text) {
+    blocks.push({ type: 'text', text });
+  }
+
+  return { role: 'user', content: blocks };
+}
+
+app.post('/chat', upload.array('files'), async (req, res) => {
+  const messages: Message[] = JSON.parse(req.body.messages);
+  const config: ChatConfig = JSON.parse(req.body.config);
+  const text: string = req.body.text || '';
+  const files = (req.files as Express.Multer.File[]) || [];
+
+  const userMessage = buildUserMessage(text, files);
+  messages.push(userMessage);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -130,7 +168,8 @@ app.post('/chat', async (req, res) => {
   }
 
   try {
-    await streamAnthropicChat(messages, config, send);
+    const assistantMessage = await streamAnthropicChat(messages, config, send);
+    send({ type: 'done', userMessage, assistantMessage });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });
   }
