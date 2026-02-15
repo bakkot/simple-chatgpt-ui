@@ -39,13 +39,47 @@ export type ChatConfig = {
 export type DoneEvent = { type: 'done'; userMessage: MessageParam; assistantMessage: Message };
 export type ErrorEvent = { type: 'error'; error: string };
 
+function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
+  if (files.length === 0) {
+    return { role: 'user', content: text };
+  }
+
+  const blocks: Anthropic.ContentBlockParam[] = [];
+  for (const file of files) {
+    const base64 = file.buffer.toString('base64');
+    if (file.mimetype.startsWith('image/')) {
+      blocks.push({
+        type: 'image',
+        source: { type: 'base64', media_type: file.mimetype as 'image/jpeg', data: base64 },
+      });
+    } else if (file.mimetype === 'application/pdf') {
+      blocks.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+      });
+    } else {
+      blocks.push({ type: 'text', text: `[File: ${file.originalname}]\n${file.buffer.toString('utf8')}` });
+    }
+  }
+
+  if (text) {
+    blocks.push({ type: 'text', text });
+  }
+
+  return { role: 'user', content: blocks };
+}
+
 async function streamAnthropicChat(
   messages: MessageParam[],
-  userMessage: MessageParam,
+  text: string,
+  files: Express.Multer.File[],
   config: ChatConfig,
   sendRaw: (json: string) => void,
 ): Promise<void> {
   try {
+    const userMessage = buildUserMessage(text, files);
+    messages.push(userMessage);
+
     const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
       ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
       : { type: 'disabled' };
@@ -57,7 +91,6 @@ async function streamAnthropicChat(
       system: config.system || undefined,
       thinking: thinkingConfig,
     });
-
 
     for await (const event of stream) {
       sendRaw(JSON.stringify(event));
@@ -106,44 +139,11 @@ app.post('/check-user', (req, res) => {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
-  if (files.length === 0) {
-    return { role: 'user', content: text };
-  }
-
-  const blocks: Anthropic.ContentBlockParam[] = [];
-  for (const file of files) {
-    const base64 = file.buffer.toString('base64');
-    if (file.mimetype.startsWith('image/')) {
-      blocks.push({
-        type: 'image',
-        source: { type: 'base64', media_type: file.mimetype as 'image/jpeg', data: base64 },
-      });
-    } else if (file.mimetype === 'application/pdf') {
-      blocks.push({
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-      });
-    } else {
-      blocks.push({ type: 'text', text: `[File: ${file.originalname}]\n${file.buffer.toString('utf8')}` });
-    }
-  }
-
-  if (text) {
-    blocks.push({ type: 'text', text });
-  }
-
-  return { role: 'user', content: blocks };
-}
-
 app.post('/chat', upload.array('files'), async (req, res) => {
   const messages: MessageParam[] = JSON.parse(req.body.messages);
   const config: ChatConfig = JSON.parse(req.body.config);
   const text: string = req.body.text || '';
   const files = (req.files as Express.Multer.File[]) || [];
-
-  const userMessage = buildUserMessage(text, files);
-  messages.push(userMessage);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -154,7 +154,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     res.write(`data: ${json}\n\n`);
   }
 
-  await streamAnthropicChat(messages, userMessage, config, sendRaw);
+  await streamAnthropicChat(messages, text, files, config, sendRaw);
   res.end();
 });
 
