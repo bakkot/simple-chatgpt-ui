@@ -25,8 +25,65 @@ const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
 });
 
+export type Message = Anthropic.MessageParam;
 
-export type Message = 'todo';
+export type ChatConfig = {
+  model: string;
+  system?: string;
+  thinking?: boolean;
+  max_tokens?: number;
+};
+
+export type SSEEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'thinking_delta'; thinking: string }
+  | { type: 'done'; message: Message }
+  | { type: 'error'; error: string };
+
+async function streamAnthropicChat(
+  messages: Message[],
+  config: ChatConfig,
+  send: (event: SSEEvent) => void,
+) {
+  const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
+    ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
+    : { type: 'disabled' };
+
+  const stream = anthropic.messages.stream({
+    model: config.model,
+    max_tokens: config.max_tokens ?? 16384,
+    messages,
+    system: config.system || undefined,
+    thinking: thinkingConfig,
+  });
+
+  stream.on('text', (text) => {
+    send({ type: 'text_delta', text });
+  });
+
+  stream.on('thinking', (thinking) => {
+    send({ type: 'thinking_delta', thinking });
+  });
+
+  const finalMessage = await stream.finalMessage();
+
+  // Convert ContentBlock[] to ContentBlockParam[] for the assistant message
+  const contentParams: Anthropic.ContentBlockParam[] = finalMessage.content.map((block) => {
+    switch (block.type) {
+      case 'text':
+        return { type: 'text' as const, text: block.text };
+      case 'thinking':
+        return { type: 'thinking' as const, thinking: block.thinking, signature: block.signature };
+      case 'redacted_thinking':
+        return { type: 'redacted_thinking' as const, data: block.data };
+      default:
+        return { type: 'text' as const, text: '' };
+    }
+  });
+
+  const assistantMessage: Message = { role: 'assistant', content: contentParams };
+  send({ type: 'done', message: assistantMessage });
+}
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -59,8 +116,27 @@ app.post('/check-user', (req, res) => {
     res.send('fail');
   }
 });
-// TODO other endpoints
 
+app.post('/chat', async (req, res) => {
+  const { messages, config } = req.body as { messages: Message[]; config: ChatConfig };
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  function send(event: SSEEvent) {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  }
+
+  try {
+    await streamAnthropicChat(messages, config, send);
+  } catch (err: any) {
+    send({ type: 'error', error: err.message ?? String(err) });
+  }
+
+  res.end();
+});
 
 app.listen(PORT, (error) => {
   if (error) {

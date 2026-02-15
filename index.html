@@ -1,7 +1,28 @@
 <!doctype html>
 <title>chatbots</title>
-<textarea id="message" class="input" rows="1" autofocus></textarea>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  #messages { flex: 1; overflow-y: auto; padding: 16px; }
+  .msg { margin-bottom: 12px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.user { color: #333; }
+  .msg.assistant { color: #000; }
+  .msg .role { font-weight: bold; margin-bottom: 2px; }
+  details { margin: 4px 0; color: #666; }
+  summary { cursor: pointer; color: #888; }
+  #input-area { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #ddd; align-items: flex-end; }
+  #message { flex: 1; resize: vertical; font-family: inherit; font-size: 14px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 40px; }
+  #send { padding: 8px 16px; border: none; background: #333; color: white; border-radius: 4px; cursor: pointer; }
+  #send:disabled { opacity: 0.5; cursor: not-allowed; }
+  #files { font-size: 13px; }
+</style>
+
+<div id="messages"></div>
+<div id="input-area">
+  <textarea id="message" class="input" rows="1" autofocus></textarea>
+  <input type="file" id="files" multiple>
+  <button id="send">Send</button>
+</div>
 
 <!-- the `.ts` import is intentional; we rewrite while serving rather than as a separate compilation step -->
 <script src="./index.ts"></script>
-
