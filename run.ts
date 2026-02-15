@@ -42,23 +42,23 @@ export type OpenAIResponse = OpenAI.Responses.Response;
 export type OpenAIHistory = OpenAIInputItem[];
 
 // --- Config ---
-export type AnthropicConfig = {
+export type Sonnet45Config = {
   model: 'claude-sonnet-4-5';
   system?: string;
   thinking?: boolean;
   max_tokens?: number;
 };
 
-export type OpenAIConfig = {
+export type GPT5Config = {
   model: 'gpt-5';
 };
 
-export type ChatConfig = AnthropicConfig | OpenAIConfig;
+export type ChatConfig = Sonnet45Config | GPT5Config;
 
 // --- Request type ---
 export type ChatRequest =
-  | { messages: AnthropicHistory; config: AnthropicConfig; text: string }
-  | { messages: OpenAIHistory; config: OpenAIConfig; text: string };
+  | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
+  | { messages: OpenAIHistory; config: GPT5Config; text: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: Anthropic.RawMessageStreamEvent };
@@ -105,7 +105,7 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: AnthropicConfig,
+  config: Sonnet45Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -170,7 +170,7 @@ async function streamOpenAIChat(
   input: OpenAIHistory,
   text: string,
   files: Express.Multer.File[],
-  config: OpenAIConfig,
+  config: GPT5Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {

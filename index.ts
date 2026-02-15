@@ -1,7 +1,7 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  AnthropicConfig, OpenAIConfig, ChatConfig, ChatRequest, StreamEvent,
+  Sonnet45Config, GPT5Config, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
