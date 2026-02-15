@@ -159,6 +159,37 @@ function showError(container: HTMLElement, message: string) {
   scrollToBottom();
 }
 
+// --- File/image rendering ---
+
+function renderImage(container: HTMLElement, src: string) {
+  const img = document.createElement('img');
+  img.src = src;
+  container.appendChild(img);
+}
+
+function renderFileLink(container: HTMLElement, url: string, filename: string) {
+  const link = document.createElement('a');
+  link.className = 'attachment';
+  link.href = url;
+  link.download = filename;
+  link.textContent = `\u{1F4CE} ${filename}`;
+  container.appendChild(link);
+}
+
+function renderUserFiles(container: HTMLElement, files: File[]) {
+  for (const file of files) {
+    if (file.type.startsWith('image/')) {
+      renderImage(container, URL.createObjectURL(file));
+    } else {
+      renderFileLink(container, URL.createObjectURL(file), file.name);
+    }
+  }
+}
+
+function renderBase64Image(container: HTMLElement, mediaType: string, data: string) {
+  renderImage(container, `data:${mediaType};base64,${data}`);
+}
+
 // --- UI helpers ---
 
 function scrollToBottom() {
@@ -195,9 +226,12 @@ async function sendMessage() {
 
   // Display user message
   const userDiv = addMessageDiv(false);
-  const userText = document.createElement('span');
-  userText.textContent = text || '(file attachment)';
-  userDiv.appendChild(userText);
+  if (text) {
+    const userText = document.createElement('span');
+    userText.textContent = text;
+    userDiv.appendChild(userText);
+  }
+  renderUserFiles(userDiv, pendingFiles);
   scrollToBottom();
 
   const request = getChatRequest(text);
@@ -284,6 +318,11 @@ async function streamChat(request: ChatRequest, files: File[]) {
               openaiHistory.push(event.userInput);
               for (const item of event.assistantMessage.output) {
                 openaiHistory.push(item);
+                // Render generated images
+                if ('type' in item && item.type === 'image_generation_call' && 'result' in item && item.result) {
+                  clearPlaceholder(ui);
+                  renderBase64Image(ui.container, 'image/png', item.result);
+                }
               }
             }
             break;
