@@ -8,15 +8,17 @@ const messagesDiv = document.getElementById('messages')!;
 const textarea = document.getElementById('message') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send') as HTMLButtonElement;
 const filesInput = document.getElementById('files') as HTMLInputElement;
-const modelSelectionDiv = document.getElementById('model-selection')!;
 const modelConfigDiv = document.getElementById('model-config')!;
 const modelRadios = document.querySelectorAll<HTMLInputElement>('input[name="model"]');
+const attachLink = document.getElementById('attach')!;
+const attachContainer = document.getElementById('attach-container')!;
+const unattachLink = document.getElementById('unattach')!;
 
 // --- Per-provider conversation history ---
-// Only one is active at a time; which one depends on the selected model.
 let anthropicHistory: AnthropicHistory = [];
 let openaiHistory: OpenAIHistory = [];
 let hasSentMessage = false;
+let pendingFiles: File[] = [];
 
 function getSelectedModel(): ChatConfig['model'] {
   const checked = document.querySelector<HTMLInputElement>('input[name="model"]:checked');
@@ -45,7 +47,7 @@ function getChatRequest(text: string): ChatRequest {
 function renderModelConfig() {
   const model = getSelectedModel();
   if (model === 'claude-sonnet-4-5') {
-    modelConfigDiv.innerHTML = '<label><input type="checkbox" id="anthropic-thinking" checked> Thinking</label>';
+    modelConfigDiv.innerHTML = '<label><input type="checkbox" id="anthropic-thinking" checked> thinking</label>';
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -65,10 +67,37 @@ for (const radio of modelRadios) {
 }
 renderModelConfig();
 
+// --- Auto-growing textarea ---
+
+function fixupTextboxSize() {
+  const growWrap = textarea.parentElement!;
+  growWrap.dataset.replicatedValue = textarea.value;
+}
+textarea.addEventListener('input', fixupTextboxSize);
+
+// --- File attachment ---
+
+attachLink.addEventListener('click', () => filesInput.click());
+
+filesInput.addEventListener('change', () => {
+  if (filesInput.files && filesInput.files.length > 0) {
+    pendingFiles = Array.from(filesInput.files);
+    attachContainer.style.display = 'none';
+    unattachLink.style.display = '';
+  }
+});
+
+unattachLink.addEventListener('click', () => {
+  pendingFiles = [];
+  filesInput.value = '';
+  attachContainer.style.display = '';
+  unattachLink.style.display = 'none';
+});
+
 // --- Streaming display helpers ---
 
 type StreamingUI = {
-  container: HTMLDivElement;
+  container: HTMLElement;
   textSpan: HTMLSpanElement | null;
   thinkingDetails: HTMLDetailsElement | null;
   thinkingContent: HTMLElement | null;
@@ -76,7 +105,7 @@ type StreamingUI = {
 
 function createStreamingUI(): StreamingUI {
   return {
-    container: appendMessageDiv('assistant'),
+    container: addMessageDiv(false),
     textSpan: null,
     thinkingDetails: null,
     thinkingContent: null,
@@ -99,8 +128,6 @@ function appendThinking(ui: StreamingUI, text: string) {
     summary.textContent = 'Thinking...';
     ui.thinkingDetails.appendChild(summary);
     ui.thinkingContent = document.createElement('pre');
-    ui.thinkingContent.style.whiteSpace = 'pre-wrap';
-    ui.thinkingContent.style.fontSize = '13px';
     ui.thinkingDetails.appendChild(ui.thinkingContent);
     ui.container.appendChild(ui.thinkingDetails);
   }
@@ -109,10 +136,10 @@ function appendThinking(ui: StreamingUI, text: string) {
 }
 
 function showError(container: HTMLElement, message: string) {
-  const errSpan = document.createElement('span');
-  errSpan.style.color = 'red';
-  errSpan.textContent = message;
-  container.appendChild(errSpan);
+  const div = document.createElement('div');
+  div.style.color = 'red';
+  div.textContent = message;
+  container.appendChild(div);
   scrollToBottom();
 }
 
@@ -122,37 +149,49 @@ function scrollToBottom() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-function appendMessageDiv(role: 'user' | 'assistant'): HTMLDivElement {
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  const roleLabel = document.createElement('div');
-  roleLabel.className = 'role';
-  roleLabel.textContent = role === 'user' ? 'You' : 'Assistant';
-  div.appendChild(roleLabel);
-  messagesDiv.appendChild(div);
-  return div;
+function addMessageDiv(isBot: boolean): HTMLElement {
+  const container = document.createElement('div');
+  container.className = isBot ? 'bot-message-container' : 'user-message-container';
+
+  const name = document.createElement('div');
+  name.className = 'name';
+  name.textContent = isBot ? 'bot' : 'user';
+  container.appendChild(name);
+
+  const text = document.createElement('div');
+  text.className = 'text';
+  container.appendChild(text);
+
+  messagesDiv.appendChild(container);
+  return text;
 }
 
 // --- Send ---
 
 async function sendMessage() {
   const text = textarea.value.trim();
-  const files = filesInput.files;
-  if (!text && (!files || files.length === 0)) return;
+  if (!text && pendingFiles.length === 0) return;
 
   sendBtn.disabled = true;
   textarea.value = '';
+  fixupTextboxSize();
   lockModelSelection();
 
   // Display user message
-  const userDiv = appendMessageDiv('user');
+  const userDiv = addMessageDiv(false);
+  userDiv.parentElement!.className = 'user-message-container';
+  userDiv.previousElementSibling!.textContent = 'user';
   const userText = document.createElement('span');
   userText.textContent = text || '(file attachment)';
   userDiv.appendChild(userText);
   scrollToBottom();
 
   const request = getChatRequest(text);
+  const files = pendingFiles;
+  pendingFiles = [];
   filesInput.value = '';
+  attachContainer.style.display = '';
+  unattachLink.style.display = 'none';
 
   await streamChat(request, files);
   sendBtn.disabled = false;
@@ -161,17 +200,15 @@ async function sendMessage() {
 
 // --- Stream ---
 
-async function streamChat(request: ChatRequest, files: FileList | null) {
+async function streamChat(request: ChatRequest, files: File[]) {
   const ui = createStreamingUI();
 
   const formData = new FormData();
   formData.append('messages', JSON.stringify(request.messages));
   formData.append('config', JSON.stringify(request.config));
   formData.append('text', request.text);
-  if (files) {
-    for (const file of Array.from(files)) {
-      formData.append('files', file);
-    }
+  for (const file of files) {
+    formData.append('files', file);
   }
 
   try {
