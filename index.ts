@@ -98,21 +98,36 @@ unattachLink.addEventListener('click', () => {
 
 type StreamingUI = {
   container: HTMLElement;
+  placeholder: HTMLElement | null;
   textSpan: HTMLSpanElement | null;
   thinkingDetails: HTMLDetailsElement | null;
   thinkingContent: HTMLElement | null;
 };
 
 function createStreamingUI(): StreamingUI {
+  const container = addMessageDiv(true);
+  const placeholder = document.createElement('span');
+  placeholder.textContent = 'Thinking...';
+  placeholder.style.color = '#999';
+  container.appendChild(placeholder);
   return {
-    container: addMessageDiv(true),
+    container,
+    placeholder,
     textSpan: null,
     thinkingDetails: null,
     thinkingContent: null,
   };
 }
 
+function clearPlaceholder(ui: StreamingUI) {
+  if (ui.placeholder) {
+    ui.placeholder.remove();
+    ui.placeholder = null;
+  }
+}
+
 function appendText(ui: StreamingUI, text: string) {
+  clearPlaceholder(ui);
   if (!ui.textSpan) {
     ui.textSpan = document.createElement('span');
     ui.container.appendChild(ui.textSpan);
@@ -122,6 +137,7 @@ function appendText(ui: StreamingUI, text: string) {
 }
 
 function appendThinking(ui: StreamingUI, text: string) {
+  clearPlaceholder(ui);
   if (!ui.thinkingDetails) {
     ui.thinkingDetails = document.createElement('details');
     const summary = document.createElement('summary');
