@@ -117,18 +117,36 @@ async function streamAnthropicChat(
     const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
-    const maxTokens = ('max_tokens' in config ? config.max_tokens : undefined) ?? 16384;
-    const thinkingConfig: Anthropic.ThinkingConfigParam = ('thinking' in config && config.thinking)
-      ? { type: 'enabled', budget_tokens: Math.max(1024, maxTokens - 1) }
-      : { type: 'disabled' };
+    let streamParams: Anthropic.MessageStreamParams;
+    switch (config.model) {
+      case 'claude-sonnet-4-5': {
+        const maxTokens = config.max_tokens ?? 16384;
+        streamParams = {
+          model: config.model,
+          max_tokens: maxTokens,
+          messages,
+          system: config.system || undefined,
+          thinking: config.thinking
+            ? { type: 'enabled', budget_tokens: Math.max(1024, maxTokens - 1) }
+            : { type: 'disabled' },
+        };
+        break;
+      }
+      case 'claude-opus-4-6': {
+        streamParams = {
+          model: config.model,
+          max_tokens: 16384,
+          messages,
+        };
+        break;
+      }
+      default: {
+        config satisfies never;
+        throw new Error(`unknown model ${(config as { model: string }).model}`);
+      }
+    }
 
-    const stream = anthropic.messages.stream({
-      model: config.model,
-      max_tokens: maxTokens,
-      messages,
-      system: ('system' in config ? config.system : undefined) || undefined,
-      thinking: thinkingConfig,
-    });
+    const stream = anthropic.messages.stream(streamParams);
 
     for await (const event of stream) {
       send({ type: 'anthropic', event });
