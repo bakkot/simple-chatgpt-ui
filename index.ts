@@ -26,28 +26,43 @@ function getSelectedModel(): ChatConfig['model'] {
 }
 
 function getChatRequest(text: string): ChatRequest {
+  saveModelConfig();
   const model = getSelectedModel();
   if (model === 'claude-sonnet-4-5') {
-    const thinkingCheckbox = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     return {
       messages: anthropicHistory,
-      config: { model, thinking: thinkingCheckbox?.checked ?? true, max_tokens: 16384 },
+      config: { model, ...configState[model] },
       text,
     };
   }
   return {
     messages: openaiHistory,
-    config: { model },
+    config: { model, ...configState[model] },
     text,
   };
 }
 
 // --- Model config UI ---
+const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
+  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384 },
+  'gpt-5': {},
+};
+let currentModel: ChatConfig['model'] = getSelectedModel();
+
+function saveModelConfig() {
+  if (currentModel === 'claude-sonnet-4-5') {
+    const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
+    if (cb) configState[currentModel].thinking = cb.checked;
+  }
+}
 
 function renderModelConfig() {
+  saveModelConfig();
   const model = getSelectedModel();
+  currentModel = model;
   if (model === 'claude-sonnet-4-5') {
-    modelConfigDiv.innerHTML = '<label><input type="checkbox" id="anthropic-thinking" checked> thinking</label>';
+    const config = configState[model];
+    modelConfigDiv.innerHTML = `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
