@@ -78,8 +78,11 @@ details pre { white-space: pre-wrap; font-size: 0.85rem; margin: 4px 0; }
   font-size: .9rem;
 }
 .model-config {
-  margin-top: 4px;
-  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  margin-left: 1rem;
 }
 .center-inputs {
   display: flex;
@@ -176,7 +179,6 @@ input[type=radio], input[type=checkbox] {
         <label for="model-gpt5">GPT-5</label>
         <input type="radio" id="model-gpt5" name="model" value="gpt-5">
       </span>
-      <div class="model-config" id="model-config"></div>
     </div>
     <div class="center-inputs">
       <div class="attach-file-container">
@@ -194,7 +196,7 @@ input[type=radio], input[type=checkbox] {
         </div>
       </div>
     </div>
-    <div></div>
+    <div class="model-config small-text" id="model-config"></div>
   </div>
 </div>
 
