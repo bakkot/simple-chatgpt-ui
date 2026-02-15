@@ -35,17 +35,27 @@ export type ChatConfig = {
   max_tokens?: number;
 };
 
-export type SSEEvent =
-  | { type: 'text_delta'; text: string }
-  | { type: 'thinking_delta'; thinking: string }
-  | { type: 'done'; userMessage: Message; assistantMessage: Message }
-  | { type: 'error'; error: string };
+export type DoneEvent = { type: 'done'; userMessage: Message; assistantMessage: Message };
+export type ErrorEvent = { type: 'error'; error: string };
+
+function contentBlockToParam(block: Anthropic.ContentBlock): Anthropic.ContentBlockParam {
+  switch (block.type) {
+    case 'text':
+      return { type: 'text', text: block.text };
+    case 'thinking':
+      return { type: 'thinking', thinking: block.thinking, signature: block.signature };
+    case 'redacted_thinking':
+      return { type: 'redacted_thinking', data: block.data };
+    default:
+      return { type: 'text', text: '' };
+  }
+}
 
 async function streamAnthropicChat(
   messages: Message[],
   config: ChatConfig,
-  send: (event: SSEEvent) => void,
-) {
+  sendRaw: (json: string) => void,
+): Promise<Message> {
   const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
     ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
     : { type: 'disabled' };
@@ -58,31 +68,13 @@ async function streamAnthropicChat(
     thinking: thinkingConfig,
   });
 
-  stream.on('text', (text) => {
-    send({ type: 'text_delta', text });
-  });
-
-  stream.on('thinking', (thinking) => {
-    send({ type: 'thinking_delta', thinking });
-  });
+  for await (const event of stream) {
+    sendRaw(JSON.stringify(event));
+  }
 
   const finalMessage = await stream.finalMessage();
-
-  // Convert ContentBlock[] to ContentBlockParam[] for the assistant message
-  const contentParams: Anthropic.ContentBlockParam[] = finalMessage.content.map((block) => {
-    switch (block.type) {
-      case 'text':
-        return { type: 'text' as const, text: block.text };
-      case 'thinking':
-        return { type: 'thinking' as const, thinking: block.thinking, signature: block.signature };
-      case 'redacted_thinking':
-        return { type: 'redacted_thinking' as const, data: block.data };
-      default:
-        return { type: 'text' as const, text: '' };
-    }
-  });
-
-  return { role: 'assistant' as const, content: contentParams } satisfies Message;
+  const content = finalMessage.content.map(contentBlockToParam);
+  return { role: 'assistant', content };
 }
 
 const app = express();
@@ -163,15 +155,17 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  function send(event: SSEEvent) {
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  function sendRaw(json: string) {
+    res.write(`data: ${json}\n\n`);
   }
 
   try {
-    const assistantMessage = await streamAnthropicChat(messages, config, send);
-    send({ type: 'done', userMessage, assistantMessage });
+    const assistantMessage = await streamAnthropicChat(messages, config, sendRaw);
+    const done: DoneEvent = { type: 'done', userMessage, assistantMessage };
+    sendRaw(JSON.stringify(done));
   } catch (err: any) {
-    send({ type: 'error', error: err.message ?? String(err) });
+    const error: ErrorEvent = { type: 'error', error: err.message ?? String(err) };
+    sendRaw(JSON.stringify(error));
   }
 
   res.end();

@@ -1,4 +1,4 @@
-import type { Message, ChatConfig, SSEEvent } from './run.ts';
+import type { Message, ChatConfig, DoneEvent, ErrorEvent } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
 const textarea = document.getElementById('message') as HTMLTextAreaElement;
@@ -88,47 +88,62 @@ async function streamChat(formData: FormData) {
       for (const part of parts) {
         const line = part.trim();
         if (!line.startsWith('data: ')) continue;
-        const json = line.slice(6);
-        const event: SSEEvent = JSON.parse(json);
+        const event = JSON.parse(line.slice(6));
 
         switch (event.type) {
-          case 'text_delta':
-            if (!textSpan) {
-              textSpan = document.createElement('span');
-              assistantDiv.appendChild(textSpan);
+          // Raw Anthropic stream events
+          case 'content_block_delta': {
+            const delta = event.delta;
+            if (delta.type === 'text_delta') {
+              if (!textSpan) {
+                textSpan = document.createElement('span');
+                assistantDiv.appendChild(textSpan);
+              }
+              textSpan.textContent += delta.text;
+              scrollToBottom();
+            } else if (delta.type === 'thinking_delta') {
+              if (!thinkingDetails) {
+                thinkingDetails = document.createElement('details');
+                const summary = document.createElement('summary');
+                summary.textContent = 'Thinking...';
+                thinkingDetails.appendChild(summary);
+                thinkingContent = document.createElement('pre');
+                thinkingContent.style.whiteSpace = 'pre-wrap';
+                thinkingContent.style.fontSize = '13px';
+                thinkingDetails.appendChild(thinkingContent);
+                assistantDiv.appendChild(thinkingDetails);
+              }
+              thinkingContent!.textContent += delta.thinking;
+              scrollToBottom();
             }
-            textSpan.textContent += event.text;
-            scrollToBottom();
             break;
+          }
 
-          case 'thinking_delta':
-            if (!thinkingDetails) {
-              thinkingDetails = document.createElement('details');
-              const summary = document.createElement('summary');
-              summary.textContent = 'Thinking...';
-              thinkingDetails.appendChild(summary);
-              thinkingContent = document.createElement('pre');
-              thinkingContent.style.whiteSpace = 'pre-wrap';
-              thinkingContent.style.fontSize = '13px';
-              thinkingDetails.appendChild(thinkingContent);
-              assistantDiv.appendChild(thinkingDetails);
+          case 'content_block_start': {
+            // Reset spans when a new text block starts so multiple text blocks render separately
+            if (event.content_block?.type === 'text') {
+              textSpan = null;
             }
-            thinkingContent!.textContent += event.thinking;
-            scrollToBottom();
             break;
+          }
 
-          case 'done':
-            conversationHistory.push(event.userMessage);
-            conversationHistory.push(event.assistantMessage);
+          // Our custom events
+          case 'done': {
+            const done = event as DoneEvent;
+            conversationHistory.push(done.userMessage);
+            conversationHistory.push(done.assistantMessage);
             break;
+          }
 
-          case 'error':
+          case 'error': {
+            const err = event as ErrorEvent;
             const errSpan = document.createElement('span');
             errSpan.style.color = 'red';
-            errSpan.textContent = `Error: ${event.error}`;
+            errSpan.textContent = `Error: ${err.error}`;
             assistantDiv.appendChild(errSpan);
             scrollToBottom();
             break;
+          }
         }
       }
     }
