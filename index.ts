@@ -105,7 +105,7 @@ type StreamingUI = {
 
 function createStreamingUI(): StreamingUI {
   return {
-    container: addMessageDiv(false),
+    container: addMessageDiv(true),
     textSpan: null,
     thinkingDetails: null,
     thinkingContent: null,
@@ -179,8 +179,6 @@ async function sendMessage() {
 
   // Display user message
   const userDiv = addMessageDiv(false);
-  userDiv.parentElement!.className = 'user-message-container';
-  userDiv.previousElementSibling!.textContent = 'user';
   const userText = document.createElement('span');
   userText.textContent = text || '(file attachment)';
   userDiv.appendChild(userText);
