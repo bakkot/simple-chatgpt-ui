@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { stripTypeScriptTypes } from 'node:module';
 import express from 'express';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
-import { stripTypeScriptTypes } from 'node:module';
+import OpenAI from 'openai';
 
 const PORT = 21665; // 'gpt' in base 36
 
@@ -19,11 +20,15 @@ function readKeyOrEmpty(name: string) {
 }
 
 const ANTHROPIC_API_KEY = readKeyOrEmpty('ANTHROPIC_KEY.txt');
+const OPENAI_API_KEY = readKeyOrEmpty('OPENAI_KEY.txt');
 
 const ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
 
 const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
+});
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY,
 });
 
 export type MessageParam = Anthropic.MessageParam;
