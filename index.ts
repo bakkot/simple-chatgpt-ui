@@ -1,4 +1,4 @@
-import type { MessageParam, ChatConfig, DoneEvent, ErrorEvent } from './run.ts';
+import type { MessageParam, ChatConfig, StreamEvent } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
 const textarea = document.getElementById('message') as HTMLTextAreaElement;
@@ -88,7 +88,7 @@ async function streamChat(formData: FormData) {
       for (const part of parts) {
         const line = part.trim();
         if (!line.startsWith('data: ')) continue;
-        const event = JSON.parse(line.slice(6));
+        const event: StreamEvent = JSON.parse(line.slice(6));
 
         switch (event.type) {
           // Raw Anthropic stream events
@@ -129,17 +129,15 @@ async function streamChat(formData: FormData) {
 
           // Our custom events
           case 'done': {
-            const done = event as DoneEvent;
-            conversationHistory.push(done.userMessage);
-            conversationHistory.push({ role: 'assistant', content: done.assistantMessage.content });
+            conversationHistory.push(event.userMessage);
+            conversationHistory.push({ role: 'assistant', content: event.assistantMessage.content });
             break;
           }
 
           case 'error': {
-            const err = event as ErrorEvent;
             const errSpan = document.createElement('span');
             errSpan.style.color = 'red';
-            errSpan.textContent = `Error: ${err.error}`;
+            errSpan.textContent = `Error: ${event.error}`;
             assistantDiv.appendChild(errSpan);
             scrollToBottom();
             break;

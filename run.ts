@@ -38,6 +38,7 @@ export type ChatConfig = {
 
 export type DoneEvent = { type: 'done'; userMessage: MessageParam; assistantMessage: Message };
 export type ErrorEvent = { type: 'error'; error: string };
+export type StreamEvent = Anthropic.RawMessageStreamEvent | DoneEvent | ErrorEvent;
 
 function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
   if (files.length === 0) {
@@ -74,7 +75,7 @@ async function streamAnthropicChat(
   text: string,
   files: Express.Multer.File[],
   config: ChatConfig,
-  sendRaw: (json: string) => void,
+  send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
     const userMessage = buildUserMessage(text, files);
@@ -93,15 +94,13 @@ async function streamAnthropicChat(
     });
 
     for await (const event of stream) {
-      sendRaw(JSON.stringify(event));
+      send(event);
     }
 
     const assistantMessage = await stream.finalMessage();
-    const done: DoneEvent = { type: 'done', userMessage, assistantMessage };
-    sendRaw(JSON.stringify(done));
+    send({ type: 'done', userMessage, assistantMessage });
   } catch (err: any) {
-    const error: ErrorEvent = { type: 'error', error: err.message ?? String(err) };
-    sendRaw(JSON.stringify(error));
+    send({ type: 'error', error: err.message ?? String(err) });
   }
 }
 
@@ -150,11 +149,11 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  function sendRaw(json: string) {
-    res.write(`data: ${json}\n\n`);
+  function send(event: StreamEvent) {
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
-  await streamAnthropicChat(messages, text, files, config, sendRaw);
+  await streamAnthropicChat(messages, text, files, config, send);
   res.end();
 });
 
