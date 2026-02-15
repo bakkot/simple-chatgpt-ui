@@ -26,7 +26,8 @@ const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
 });
 
-export type Message = Anthropic.MessageParam;
+export type MessageParam = Anthropic.MessageParam;
+export type Message = Anthropic.Message;
 
 export type ChatConfig = {
   model: string;
@@ -35,46 +36,40 @@ export type ChatConfig = {
   max_tokens?: number;
 };
 
-export type DoneEvent = { type: 'done'; userMessage: Message; assistantMessage: Message };
+export type DoneEvent = { type: 'done'; userMessage: MessageParam; assistantMessage: Message };
 export type ErrorEvent = { type: 'error'; error: string };
 
-function contentBlockToParam(block: Anthropic.ContentBlock): Anthropic.ContentBlockParam {
-  switch (block.type) {
-    case 'text':
-      return { type: 'text', text: block.text };
-    case 'thinking':
-      return { type: 'thinking', thinking: block.thinking, signature: block.signature };
-    case 'redacted_thinking':
-      return { type: 'redacted_thinking', data: block.data };
-    default:
-      return { type: 'text', text: '' };
-  }
-}
-
 async function streamAnthropicChat(
-  messages: Message[],
+  messages: MessageParam[],
+  userMessage: MessageParam,
   config: ChatConfig,
   sendRaw: (json: string) => void,
-): Promise<Message> {
-  const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
-    ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
-    : { type: 'disabled' };
+): Promise<void> {
+  try {
+    const thinkingConfig: Anthropic.ThinkingConfigParam = config.thinking
+      ? { type: 'enabled', budget_tokens: Math.max(1024, (config.max_tokens ?? 16384) - 1) }
+      : { type: 'disabled' };
 
-  const stream = anthropic.messages.stream({
-    model: config.model,
-    max_tokens: config.max_tokens ?? 16384,
-    messages,
-    system: config.system || undefined,
-    thinking: thinkingConfig,
-  });
+    const stream = anthropic.messages.stream({
+      model: config.model,
+      max_tokens: config.max_tokens ?? 16384,
+      messages,
+      system: config.system || undefined,
+      thinking: thinkingConfig,
+    });
 
-  for await (const event of stream) {
-    sendRaw(JSON.stringify(event));
+
+    for await (const event of stream) {
+      sendRaw(JSON.stringify(event));
+    }
+
+    const assistantMessage = await stream.finalMessage();
+    const done: DoneEvent = { type: 'done', userMessage, assistantMessage };
+    sendRaw(JSON.stringify(done));
+  } catch (err: any) {
+    const error: ErrorEvent = { type: 'error', error: err.message ?? String(err) };
+    sendRaw(JSON.stringify(error));
   }
-
-  const finalMessage = await stream.finalMessage();
-  const content = finalMessage.content.map(contentBlockToParam);
-  return { role: 'assistant', content };
 }
 
 const app = express();
@@ -111,7 +106,7 @@ app.post('/check-user', (req, res) => {
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-function buildUserMessage(text: string, files: Express.Multer.File[]): Message {
+function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
   if (files.length === 0) {
     return { role: 'user', content: text };
   }
@@ -142,7 +137,7 @@ function buildUserMessage(text: string, files: Express.Multer.File[]): Message {
 }
 
 app.post('/chat', upload.array('files'), async (req, res) => {
-  const messages: Message[] = JSON.parse(req.body.messages);
+  const messages: MessageParam[] = JSON.parse(req.body.messages);
   const config: ChatConfig = JSON.parse(req.body.config);
   const text: string = req.body.text || '';
   const files = (req.files as Express.Multer.File[]) || [];
@@ -159,15 +154,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     res.write(`data: ${json}\n\n`);
   }
 
-  try {
-    const assistantMessage = await streamAnthropicChat(messages, config, sendRaw);
-    const done: DoneEvent = { type: 'done', userMessage, assistantMessage };
-    sendRaw(JSON.stringify(done));
-  } catch (err: any) {
-    const error: ErrorEvent = { type: 'error', error: err.message ?? String(err) };
-    sendRaw(JSON.stringify(error));
-  }
-
+  await streamAnthropicChat(messages, userMessage, config, sendRaw);
   res.end();
 });
 

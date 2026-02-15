@@ -1,14 +1,14 @@
-import type { Message, ChatConfig, DoneEvent, ErrorEvent } from './run.ts';
+import type { MessageParam, ChatConfig, DoneEvent, ErrorEvent } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
 const textarea = document.getElementById('message') as HTMLTextAreaElement;
 const sendBtn = document.getElementById('send') as HTMLButtonElement;
 const filesInput = document.getElementById('files') as HTMLInputElement;
 
-const conversationHistory: Message[] = [];
+const conversationHistory: MessageParam[] = [];
 
 const config: ChatConfig = {
-  model: 'claude-sonnet-4-5-20250514',
+  model: 'claude-sonnet-4-5',
   thinking: true,
   max_tokens: 16384,
 };
@@ -131,7 +131,7 @@ async function streamChat(formData: FormData) {
           case 'done': {
             const done = event as DoneEvent;
             conversationHistory.push(done.userMessage);
-            conversationHistory.push(done.assistantMessage);
+            conversationHistory.push({ role: 'assistant', content: done.assistantMessage.content });
             break;
           }
 
