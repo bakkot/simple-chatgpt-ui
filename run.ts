@@ -29,16 +29,18 @@ const anthropic = new Anthropic({
 export type MessageParam = Anthropic.MessageParam;
 export type Message = Anthropic.Message;
 
-export type ChatConfig = {
-  model: string;
-  system?: string;
-  thinking?: boolean;
-  max_tokens?: number;
-};
+export type ChatConfig =
+  | {
+    model: 'claude-sonnet-4-5';
+    system?: string;
+    thinking?: boolean;
+    max_tokens?: number;
+  };
 
+export type AnthropicEvent = { type: 'anthropic'; event: Anthropic.RawMessageStreamEvent };
 export type DoneEvent = { type: 'done'; userMessage: MessageParam; assistantMessage: Message };
 export type ErrorEvent = { type: 'error'; error: string };
-export type StreamEvent = Anthropic.RawMessageStreamEvent | DoneEvent | ErrorEvent;
+export type StreamEvent = AnthropicEvent | DoneEvent | ErrorEvent;
 
 function buildUserMessage(text: string, files: Express.Multer.File[]): MessageParam {
   if (files.length === 0) {
@@ -94,7 +96,7 @@ async function streamAnthropicChat(
     });
 
     for await (const event of stream) {
-      send(event);
+      send({ type: 'anthropic', event });
     }
 
     const assistantMessage = await stream.finalMessage();

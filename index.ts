@@ -91,43 +91,41 @@ async function streamChat(formData: FormData) {
         const event: StreamEvent = JSON.parse(line.slice(6));
 
         switch (event.type) {
-          // Raw Anthropic stream events
-          case 'content_block_delta': {
-            const delta = event.delta;
-            if (delta.type === 'text_delta') {
-              if (!textSpan) {
-                textSpan = document.createElement('span');
-                assistantDiv.appendChild(textSpan);
+          case 'anthropic': {
+            const raw = event.event;
+            if (raw.type === 'content_block_delta') {
+              const delta = raw.delta;
+              if (delta.type === 'text_delta') {
+                if (!textSpan) {
+                  textSpan = document.createElement('span');
+                  assistantDiv.appendChild(textSpan);
+                }
+                textSpan.textContent += delta.text;
+                scrollToBottom();
+              } else if (delta.type === 'thinking_delta') {
+                if (!thinkingDetails) {
+                  thinkingDetails = document.createElement('details');
+                  const summary = document.createElement('summary');
+                  summary.textContent = 'Thinking...';
+                  thinkingDetails.appendChild(summary);
+                  thinkingContent = document.createElement('pre');
+                  thinkingContent.style.whiteSpace = 'pre-wrap';
+                  thinkingContent.style.fontSize = '13px';
+                  thinkingDetails.appendChild(thinkingContent);
+                  assistantDiv.appendChild(thinkingDetails);
+                }
+                thinkingContent!.textContent += delta.thinking;
+                scrollToBottom();
               }
-              textSpan.textContent += delta.text;
-              scrollToBottom();
-            } else if (delta.type === 'thinking_delta') {
-              if (!thinkingDetails) {
-                thinkingDetails = document.createElement('details');
-                const summary = document.createElement('summary');
-                summary.textContent = 'Thinking...';
-                thinkingDetails.appendChild(summary);
-                thinkingContent = document.createElement('pre');
-                thinkingContent.style.whiteSpace = 'pre-wrap';
-                thinkingContent.style.fontSize = '13px';
-                thinkingDetails.appendChild(thinkingContent);
-                assistantDiv.appendChild(thinkingDetails);
+            } else if (raw.type === 'content_block_start') {
+              // Reset spans when a new text block starts so multiple text blocks render separately
+              if (raw.content_block?.type === 'text') {
+                textSpan = null;
               }
-              thinkingContent!.textContent += delta.thinking;
-              scrollToBottom();
             }
             break;
           }
 
-          case 'content_block_start': {
-            // Reset spans when a new text block starts so multiple text blocks render separately
-            if (event.content_block?.type === 'text') {
-              textSpan = null;
-            }
-            break;
-          }
-
-          // Our custom events
           case 'done': {
             conversationHistory.push(event.userMessage);
             conversationHistory.push({ role: 'assistant', content: event.assistantMessage.content });
@@ -138,6 +136,16 @@ async function streamChat(formData: FormData) {
             const errSpan = document.createElement('span');
             errSpan.style.color = 'red';
             errSpan.textContent = `Error: ${event.error}`;
+            assistantDiv.appendChild(errSpan);
+            scrollToBottom();
+            break;
+          }
+
+          default: {
+            event satisfies never; // assert switch exhaustiveness
+            const errSpan = document.createElement('span');
+            errSpan.style.color = 'red';
+            errSpan.textContent = `Error: got bad message type ${(event as { type: string }).type}`;
             assistantDiv.appendChild(errSpan);
             scrollToBottom();
             break;
