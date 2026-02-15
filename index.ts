@@ -47,6 +47,33 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384 },
   'gpt-5': {},
 };
+
+type SavedState = { model: ChatConfig['model']; config: typeof configState };
+const STORAGE_KEY = 'chatbot-config';
+
+function loadSavedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const saved: SavedState = JSON.parse(raw);
+    // Restore per-model config
+    for (const key of Object.keys(configState) as ChatConfig['model'][]) {
+      if (saved.config[key]) {
+        Object.assign(configState[key], saved.config[key]);
+      }
+    }
+    // Restore selected model
+    const radio = document.querySelector<HTMLInputElement>(`input[name="model"][value="${saved.model}"]`);
+    if (radio) radio.checked = true;
+  } catch {}
+}
+
+function persistState() {
+  const saved: SavedState = { model: getSelectedModel(), config: configState };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+}
+
+loadSavedState();
 let currentModel: ChatConfig['model'] = getSelectedModel();
 
 function saveModelConfig() {
@@ -54,6 +81,7 @@ function saveModelConfig() {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
   }
+  persistState();
 }
 
 function renderModelConfig() {
@@ -66,6 +94,7 @@ function renderModelConfig() {
   } else {
     modelConfigDiv.innerHTML = '';
   }
+  persistState();
 }
 
 function lockModelSelection() {
