@@ -55,6 +55,11 @@ export type OpenAIConfig = {
 
 export type ChatConfig = AnthropicConfig | OpenAIConfig;
 
+// --- Request type ---
+export type ChatRequest =
+  | { messages: AnthropicHistory; config: AnthropicConfig; text: string }
+  | { messages: OpenAIHistory; config: OpenAIConfig; text: string };
+
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: Anthropic.RawMessageStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
@@ -226,8 +231,11 @@ app.post('/check-user', (req, res) => {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 app.post('/chat', upload.array('files'), async (req, res) => {
-  const config: ChatConfig = JSON.parse(req.body.config);
-  const text: string = req.body.text || '';
+  const chat: ChatRequest = {
+    messages: JSON.parse(req.body.messages),
+    config: JSON.parse(req.body.config),
+    text: req.body.text || '',
+  };
   const files = (req.files as Express.Multer.File[]) || [];
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -239,12 +247,10 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   }
 
-  if (config.model === 'claude-sonnet-4-5') {
-    const messages: AnthropicHistory = JSON.parse(req.body.messages);
-    await streamAnthropicChat(messages, text, files, config, send);
+  if (chat.config.model === 'claude-sonnet-4-5') {
+    await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
   } else {
-    const messages: OpenAIHistory = JSON.parse(req.body.messages);
-    await streamOpenAIChat(messages, text, files, config, send);
+    await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
   }
 
   res.end();

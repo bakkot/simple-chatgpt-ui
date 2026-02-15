@@ -1,7 +1,7 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  AnthropicConfig, OpenAIConfig, ChatConfig, StreamEvent,
+  AnthropicConfig, OpenAIConfig, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -23,23 +23,21 @@ function getSelectedModel(): ChatConfig['model'] {
   return (checked?.value ?? 'claude-sonnet-4-5') as ChatConfig['model'];
 }
 
-function getConfig(): ChatConfig {
+function getChatRequest(text: string): ChatRequest {
   const model = getSelectedModel();
   if (model === 'claude-sonnet-4-5') {
     const thinkingCheckbox = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     return {
-      model,
-      thinking: thinkingCheckbox?.checked ?? true,
-      max_tokens: 16384,
-    } satisfies AnthropicConfig;
+      messages: anthropicHistory,
+      config: { model, thinking: thinkingCheckbox?.checked ?? true, max_tokens: 16384 },
+      text,
+    };
   }
-  return { model } satisfies OpenAIConfig;
-}
-
-function getHistory(): AnthropicHistory | OpenAIHistory {
-  const model = getSelectedModel();
-  if (model === 'claude-sonnet-4-5') return anthropicHistory;
-  return openaiHistory;
+  return {
+    messages: openaiHistory,
+    config: { model },
+    text,
+  };
 }
 
 // --- Model config UI ---
@@ -153,27 +151,28 @@ async function sendMessage() {
   userDiv.appendChild(userText);
   scrollToBottom();
 
-  // Build FormData
-  const formData = new FormData();
-  formData.append('messages', JSON.stringify(getHistory()));
-  formData.append('config', JSON.stringify(getConfig()));
-  formData.append('text', text);
-  if (files) {
-    for (const file of Array.from(files)) {
-      formData.append('files', file);
-    }
-  }
+  const request = getChatRequest(text);
   filesInput.value = '';
 
-  await streamChat(formData);
+  await streamChat(request, files);
   sendBtn.disabled = false;
   textarea.focus();
 }
 
 // --- Stream ---
 
-async function streamChat(formData: FormData) {
+async function streamChat(request: ChatRequest, files: FileList | null) {
   const ui = createStreamingUI();
+
+  const formData = new FormData();
+  formData.append('messages', JSON.stringify(request.messages));
+  formData.append('config', JSON.stringify(request.config));
+  formData.append('text', request.text);
+  if (files) {
+    for (const file of Array.from(files)) {
+      formData.append('files', file);
+    }
+  }
 
   try {
     const resp = await fetch('/chat', {
