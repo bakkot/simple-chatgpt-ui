@@ -162,6 +162,7 @@ type StreamingUI = {
   thinkingContent: HTMLElement | null;
   searchDetails: HTMLDetailsElement | null;
   searchContent: HTMLElement | null;
+  citationCount: number;
 };
 
 function createStreamingUI(): StreamingUI {
@@ -178,6 +179,7 @@ function createStreamingUI(): StreamingUI {
     thinkingContent: null,
     searchDetails: null,
     searchContent: null,
+    citationCount: 0,
   };
 }
 
@@ -210,6 +212,27 @@ function appendThinking(ui: StreamingUI, text: string) {
     ui.container.appendChild(ui.thinkingDetails);
   }
   ui.thinkingContent!.textContent += text;
+  scrollToBottom();
+}
+
+function appendCitation(ui: StreamingUI, citation: { url: string; title: string | null; cited_text: string }) {
+  clearPlaceholder(ui);
+  ui.citationCount++;
+  const a = document.createElement('a');
+  a.href = citation.url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.className = 'citation';
+  a.textContent = `[cite ${ui.citationCount}]`;
+  a.title = (citation.title ? citation.title + '\n\n' : '') + citation.cited_text;
+  // Insert after current textSpan, or append to container
+  if (ui.textSpan?.nextSibling) {
+    ui.container.insertBefore(a, ui.textSpan.nextSibling);
+  } else {
+    ui.container.appendChild(a);
+  }
+  // Force next text to create a new span (so it appears after the citation)
+  ui.textSpan = null;
   scrollToBottom();
 }
 
@@ -383,6 +406,11 @@ async function streamChat(request: ChatRequest, files: File[]) {
                 appendText(ui, delta.text);
               } else if (delta.type === 'thinking_delta') {
                 appendThinking(ui, delta.thinking);
+              } else if (delta.type === 'citations_delta') {
+                const c = delta.citation;
+                if ('url' in c) {
+                  appendCitation(ui, c);
+                }
               } else if (delta.type === 'input_json_delta') {
                 searchQueryJson += delta.partial_json;
               }
