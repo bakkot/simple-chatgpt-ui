@@ -54,7 +54,7 @@ function getChatRequest(text: string): ChatRequest {
 // --- Model config UI ---
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384 },
-  'claude-opus-4-6': {},
+  'claude-opus-4-6': { thinking: true },
   'gpt-5': {},
 };
 
@@ -87,7 +87,7 @@ loadSavedState();
 let currentModel: ChatConfig['model'] = getSelectedModel();
 
 function saveModelConfig() {
-  if (currentModel === 'claude-sonnet-4-5') {
+  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
   }
@@ -98,7 +98,7 @@ function renderModelConfig() {
   saveModelConfig();
   const model = getSelectedModel();
   currentModel = model;
-  if (model === 'claude-sonnet-4-5') {
+  if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
     const config = configState[model];
     modelConfigDiv.innerHTML = `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>`;
   } else {

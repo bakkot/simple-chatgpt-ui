@@ -51,6 +51,7 @@ export type Sonnet45Config = {
 
 export type Opus46Config = {
   model: 'claude-opus-4-6';
+  thinking?: boolean;
 };
 
 export type GPT5Config = {
@@ -137,6 +138,7 @@ async function streamAnthropicChat(
           model: config.model,
           max_tokens: 16384,
           messages,
+          thinking: config.thinking ? { type: 'adaptive' } : { type: 'disabled' },
         };
         break;
       }
