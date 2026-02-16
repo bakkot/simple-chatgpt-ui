@@ -17,6 +17,8 @@ Streaming chat UI for multiple providers.
 
 Never, ever use `as any`. If you absolutely must you can cast `as unknown as Whatever`, but only if you leave a comment explaining why this is necessary, but before doing so you should think about whether there is a way to express the thing you need without it.
 
+When a type error arises, prefer fixing the types to reflect reality rather than casting to silence the compiler. For example, if a variable can hold values from two different APIs, widen the type to a union instead of asserting at the point of assignment.
+
 ## Type checking
 
 ```

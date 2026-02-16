@@ -32,8 +32,11 @@ const openai = new OpenAI({
 });
 
 // --- Anthropic types ---
-export type AnthropicMessageParam = Anthropic.MessageParam;
-export type AnthropicMessage = Anthropic.Message;
+// History can contain both regular and beta message params, since assistant
+// responses may include beta-only content blocks (e.g. code execution results).
+export type AnthropicMessageParam = Anthropic.MessageParam | Anthropic.Beta.BetaMessageParam;
+export type AnthropicMessage = Anthropic.Message | Anthropic.Beta.BetaMessage;
+export type AnthropicStreamEvent = Anthropic.RawMessageStreamEvent | Anthropic.Beta.BetaRawMessageStreamEvent;
 export type AnthropicHistory = AnthropicMessageParam[];
 
 // --- OpenAI types ---
@@ -49,6 +52,8 @@ export type Sonnet45Config = {
   max_tokens?: number;
   web_search?: boolean;
   web_search_max_uses?: number;
+  code_execution?: boolean;
+  container?: string;
 };
 
 export type Opus46Config = {
@@ -56,6 +61,8 @@ export type Opus46Config = {
   thinking?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
+  code_execution?: boolean;
+  container?: string;
 };
 
 export type GPT5Config = {
@@ -71,10 +78,10 @@ export type ChatRequest =
   | { messages: OpenAIHistory; config: GPT5Config; text: string };
 
 // --- Stream events ---
-export type AnthropicEvent = { type: 'anthropic'; event: Anthropic.RawMessageStreamEvent };
+export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
 export type DoneEvent =
-  | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage }
+  | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage; container?: string }
   | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse };
 export type ErrorEvent = { type: 'error'; error: string };
 export type StreamEvent = AnthropicEvent | OpenAIEvent | DoneEvent | ErrorEvent;
@@ -122,16 +129,11 @@ async function streamAnthropicChat(
     const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
-    const tools: Anthropic.ToolUnion[] = [];
-    if (config.web_search) {
-      tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: config.web_search_max_uses ?? 10 });
-    }
-
-    let streamParams: Anthropic.MessageStreamParams;
+    let baseParams: { model: string; max_tokens: number; messages: AnthropicHistory; system?: string; thinking: Anthropic.ThinkingConfigParam };
     switch (config.model) {
       case 'claude-sonnet-4-5': {
         const maxTokens = config.max_tokens ?? 16384;
-        streamParams = {
+        baseParams = {
           model: config.model,
           max_tokens: maxTokens,
           messages,
@@ -143,7 +145,7 @@ async function streamAnthropicChat(
         break;
       }
       case 'claude-opus-4-6': {
-        streamParams = {
+        baseParams = {
           model: config.model,
           max_tokens: 16384,
           messages,
@@ -157,18 +159,34 @@ async function streamAnthropicChat(
       }
     }
 
-    if (tools.length > 0) {
-      streamParams.tools = tools;
+    const tools: Anthropic.Beta.BetaToolUnion[] = [];
+    if (config.code_execution) {
+      tools.push({ type: 'code_execution_20250825', name: 'code_execution' });
+    }
+    if (config.web_search) {
+      tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: config.web_search_max_uses ?? 10 });
     }
 
-    const stream = anthropic.messages.stream(streamParams);
+    // Always use the beta API — it's a superset of the regular API and accepts
+    // the wider AnthropicHistory type (which may contain beta content blocks
+    // from previous code execution responses).
+    const stream = anthropic.beta.messages.stream({
+      ...baseParams,
+      tools: tools.length > 0 ? tools : undefined,
+      betas: config.code_execution ? ['code-execution-2025-08-25'] : [],
+      container: config.container ?? undefined,
+    });
 
     for await (const event of stream) {
       send({ type: 'anthropic', event });
     }
 
-    const assistantMessage = await stream.finalMessage();
-    send({ type: 'done', provider: 'anthropic', userMessage, assistantMessage });
+    const msg = await stream.finalMessage();
+    send({
+      type: 'done', provider: 'anthropic', userMessage,
+      assistantMessage: msg,
+      container: msg.container?.id ?? undefined,
+    });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });
   }

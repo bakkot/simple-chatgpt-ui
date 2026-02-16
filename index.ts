@@ -16,6 +16,7 @@ const unattachLink = document.getElementById('unattach')!;
 
 // --- Per-provider conversation history ---
 let anthropicHistory: AnthropicHistory = [];
+let anthropicContainer: string | undefined;
 let openaiHistory: OpenAIHistory = [];
 let hasSentMessage = false;
 let pendingFiles: File[] = [];
@@ -33,7 +34,7 @@ function getChatRequest(text: string): ChatRequest {
     case 'claude-opus-4-6': {
       return {
         messages: anthropicHistory,
-        config: { model, ...configState[model] },
+        config: { model, ...configState[model], container: anthropicContainer },
         text,
       } as ChatRequest;
     }
@@ -53,8 +54,8 @@ function getChatRequest(text: string): ChatRequest {
 
 // --- Model config UI ---
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
-  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10 },
-  'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10 },
+  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
+  'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5': {},
 };
 
@@ -92,6 +93,8 @@ function saveModelConfig() {
     if (cb) configState[currentModel].thinking = cb.checked;
     const ws = document.getElementById('anthropic-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
+    const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
+    if (ce) configState[currentModel].code_execution = ce.checked;
   }
   persistState();
 }
@@ -104,7 +107,8 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
-      `<label><input type="checkbox" id="anthropic-web-search" ${config.web_search ? 'checked' : ''}> web search</label>`;
+      `<label><input type="checkbox" id="anthropic-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
+      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -265,6 +269,35 @@ function addSearchResults(ui: StreamingUI, results: Array<{ title: string; url: 
   scrollToBottom();
 }
 
+function startCodeExecution(ui: StreamingUI, code: string) {
+  clearPlaceholder(ui);
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Code execution';
+  details.appendChild(summary);
+  const pre = document.createElement('pre');
+  pre.textContent = code;
+  details.appendChild(pre);
+  ui.container.appendChild(details);
+  scrollToBottom();
+}
+
+function addCodeExecutionResult(ui: StreamingUI, result: { stdout: string; stderr: string }) {
+  clearPlaceholder(ui);
+  const details = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = 'Execution result';
+  details.appendChild(summary);
+  const pre = document.createElement('pre');
+  const parts: string[] = [];
+  if (result.stdout) parts.push(result.stdout);
+  if (result.stderr) parts.push(`stderr:\n${result.stderr}`);
+  pre.textContent = parts.join('\n') || '(no output)';
+  details.appendChild(pre);
+  ui.container.appendChild(details);
+  scrollToBottom();
+}
+
 function showError(container: HTMLElement, message: string) {
   const div = document.createElement('div');
   div.style.color = 'red';
@@ -382,7 +415,8 @@ async function streamChat(request: ChatRequest, files: File[]) {
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let searchQueryJson = '';
+    let serverToolJson = '';
+    let serverToolName = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -412,26 +446,37 @@ async function streamChat(request: ChatRequest, files: File[]) {
                   appendCitation(ui, c);
                 }
               } else if (delta.type === 'input_json_delta') {
-                searchQueryJson += delta.partial_json;
+                serverToolJson += delta.partial_json;
               }
             } else if (raw.type === 'content_block_start') {
               if (raw.content_block?.type === 'text') {
                 ui.textSpan = null;
               } else if (raw.content_block?.type === 'server_tool_use') {
-                searchQueryJson = '';
+                serverToolJson = '';
+                serverToolName = raw.content_block.name;
               } else if (raw.content_block?.type === 'web_search_tool_result') {
                 const content = raw.content_block.content;
                 if (Array.isArray(content)) {
                   addSearchResults(ui, content);
                 }
+              } else if (raw.content_block?.type === 'code_execution_tool_result') {
+                const { content } = raw.content_block;
+                if ('stdout' in content) {
+                  addCodeExecutionResult(ui, content);
+                }
               }
             } else if (raw.type === 'content_block_stop') {
-              if (searchQueryJson) {
+              if (serverToolJson) {
                 try {
-                  const parsed = JSON.parse(searchQueryJson);
-                  startSearch(ui, parsed.query);
+                  const parsed = JSON.parse(serverToolJson);
+                  if (serverToolName === 'web_search') {
+                    startSearch(ui, parsed.query);
+                  } else if (serverToolName === 'code_execution') {
+                    startCodeExecution(ui, parsed.code);
+                  }
                 } catch {}
-                searchQueryJson = '';
+                serverToolJson = '';
+                serverToolName = '';
               }
             }
             break;
@@ -451,6 +496,9 @@ async function streamChat(request: ChatRequest, files: File[]) {
             if (event.provider === 'anthropic') {
               anthropicHistory.push(event.userMessage);
               anthropicHistory.push({ role: 'assistant', content: event.assistantMessage.content });
+              if (event.container) {
+                anthropicContainer = event.container;
+              }
             } else {
               openaiHistory.push(event.userInput);
               for (const item of event.assistantMessage.output) {
