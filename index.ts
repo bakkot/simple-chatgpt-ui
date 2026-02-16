@@ -269,14 +269,14 @@ function addSearchResults(ui: StreamingUI, results: Array<{ title: string; url: 
   scrollToBottom();
 }
 
-function startCodeExecution(ui: StreamingUI, code: string) {
+function startServerTool(ui: StreamingUI, label: string, content: string) {
   clearPlaceholder(ui);
   const details = document.createElement('details');
   const summary = document.createElement('summary');
-  summary.textContent = 'Code execution';
+  summary.textContent = label;
   details.appendChild(summary);
   const pre = document.createElement('pre');
-  pre.textContent = code;
+  pre.textContent = content;
   details.appendChild(pre);
   ui.container.appendChild(details);
   scrollToBottom();
@@ -447,32 +447,52 @@ async function streamChat(request: ChatRequest, files: File[]) {
                 }
               } else if (delta.type === 'input_json_delta') {
                 serverToolJson += delta.partial_json;
+              } else if (delta.type !== 'signature_delta') {
+                console.warn('unhandled content_block_delta type:', delta.type, delta);
               }
             } else if (raw.type === 'content_block_start') {
-              if (raw.content_block?.type === 'text') {
+              const blockType = raw.content_block?.type;
+              if (blockType === 'text') {
                 ui.textSpan = null;
-              } else if (raw.content_block?.type === 'server_tool_use') {
+              } else if (blockType === 'server_tool_use') {
                 serverToolJson = '';
                 serverToolName = raw.content_block.name;
-              } else if (raw.content_block?.type === 'web_search_tool_result') {
+              } else if (blockType === 'web_search_tool_result') {
                 const content = raw.content_block.content;
                 if (Array.isArray(content)) {
                   addSearchResults(ui, content);
                 }
-              } else if (raw.content_block?.type === 'code_execution_tool_result') {
+              } else if (blockType === 'code_execution_tool_result' || blockType === 'bash_code_execution_tool_result') {
                 const { content } = raw.content_block;
                 if ('stdout' in content) {
                   addCodeExecutionResult(ui, content);
                 }
+              } else if (blockType === 'text_editor_code_execution_tool_result') {
+                // Text editor results are structural (create/view/str_replace) — no stdout to show
+              } else if (blockType !== 'thinking' && blockType !== 'redacted_thinking') {
+                console.warn('unhandled content_block_start type:', blockType, raw.content_block);
               }
             } else if (raw.type === 'content_block_stop') {
               if (serverToolJson) {
                 try {
                   const parsed = JSON.parse(serverToolJson);
-                  if (serverToolName === 'web_search') {
-                    startSearch(ui, parsed.query);
-                  } else if (serverToolName === 'code_execution') {
-                    startCodeExecution(ui, parsed.code);
+                  switch (serverToolName) {
+                    case 'web_search':
+                      startSearch(ui, parsed.query);
+                      break;
+                    case 'code_execution':
+                      startServerTool(ui, 'Code execution', parsed.code);
+                      break;
+                    case 'bash_code_execution':
+                      startServerTool(ui, 'Bash', parsed.command);
+                      break;
+                    case 'text_editor_code_execution':
+                      startServerTool(ui, `File: ${parsed.command} ${parsed.path}`, parsed.file_text ?? parsed.new_str ?? '');
+                      break;
+                    default:
+                      console.warn('unhandled server tool:', serverToolName, parsed);
+                      startServerTool(ui, serverToolName, JSON.stringify(parsed, null, 2));
+                      break;
                   }
                 } catch {}
                 serverToolJson = '';
