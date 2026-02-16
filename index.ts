@@ -269,32 +269,33 @@ function addSearchResults(ui: StreamingUI, results: Array<{ title: string; url: 
   scrollToBottom();
 }
 
-function startServerTool(ui: StreamingUI, label: string, content: string) {
+function startServerTool(ui: StreamingUI, summary: string, body: string): HTMLDetailsElement {
   clearPlaceholder(ui);
   const details = document.createElement('details');
-  const summary = document.createElement('summary');
-  summary.textContent = label;
-  details.appendChild(summary);
-  const pre = document.createElement('pre');
-  pre.textContent = content;
-  details.appendChild(pre);
+  const summaryEl = document.createElement('summary');
+  summaryEl.textContent = summary;
+  details.appendChild(summaryEl);
+  if (body) {
+    const pre = document.createElement('pre');
+    pre.textContent = body;
+    details.appendChild(pre);
+  }
   ui.container.appendChild(details);
   scrollToBottom();
+  return details;
 }
 
-function addCodeExecutionResult(ui: StreamingUI, result: { stdout: string; stderr: string }) {
-  clearPlaceholder(ui);
-  const details = document.createElement('details');
-  const summary = document.createElement('summary');
-  summary.textContent = 'Execution result';
-  details.appendChild(summary);
-  const pre = document.createElement('pre');
+function formatExecutionResult(result: { stdout: string; stderr: string }): string {
   const parts: string[] = [];
   if (result.stdout) parts.push(result.stdout);
   if (result.stderr) parts.push(`stderr:\n${result.stderr}`);
-  pre.textContent = parts.join('\n') || '(no output)';
-  details.appendChild(pre);
-  ui.container.appendChild(details);
+  return parts.join('\n') || '(no output)';
+}
+
+function addExecutionResult(container: HTMLElement, result: { stdout: string; stderr: string }) {
+  const pre = document.createElement('pre');
+  pre.textContent = formatExecutionResult(result);
+  container.appendChild(pre);
   scrollToBottom();
 }
 
@@ -417,6 +418,8 @@ async function streamChat(request: ChatRequest, files: File[]) {
     let buffer = '';
     let serverToolJson = '';
     let serverToolName = '';
+    let serverToolId = '';
+    const serverToolElements = new Map<string, HTMLDetailsElement>();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -457,15 +460,24 @@ async function streamChat(request: ChatRequest, files: File[]) {
               } else if (blockType === 'server_tool_use') {
                 serverToolJson = '';
                 serverToolName = raw.content_block.name;
+                serverToolId = raw.content_block.id;
               } else if (blockType === 'web_search_tool_result') {
                 const content = raw.content_block.content;
                 if (Array.isArray(content)) {
                   addSearchResults(ui, content);
                 }
               } else if (blockType === 'code_execution_tool_result' || blockType === 'bash_code_execution_tool_result') {
-                const { content } = raw.content_block;
+                const { content, tool_use_id } = raw.content_block;
                 if ('stdout' in content) {
-                  addCodeExecutionResult(ui, content);
+                  const pairedDetails = serverToolElements.get(tool_use_id);
+                  if (pairedDetails) {
+                    addExecutionResult(pairedDetails, content);
+                    serverToolElements.delete(tool_use_id);
+                  } else {
+                    // Fallback: result arrived without a matching invocation
+                    const details = startServerTool(ui, 'Execution result', '');
+                    addExecutionResult(details, content);
+                  }
                 }
               } else if (blockType === 'text_editor_code_execution_tool_result') {
                 // Text editor results are structural (create/view/str_replace) — no stdout to show
@@ -476,23 +488,27 @@ async function streamChat(request: ChatRequest, files: File[]) {
               if (serverToolJson) {
                 try {
                   const parsed = JSON.parse(serverToolJson);
+                  let details: HTMLDetailsElement | undefined;
                   switch (serverToolName) {
                     case 'web_search':
                       startSearch(ui, parsed.query);
                       break;
                     case 'code_execution':
-                      startServerTool(ui, 'Code execution', parsed.code);
+                      details = startServerTool(ui, parsed.code.split('\n')[0], parsed.code);
                       break;
                     case 'bash_code_execution':
-                      startServerTool(ui, 'Bash', parsed.command);
+                      details = startServerTool(ui, `$ ${parsed.command}`, '');
                       break;
                     case 'text_editor_code_execution':
-                      startServerTool(ui, `File: ${parsed.command} ${parsed.path}`, parsed.file_text ?? parsed.new_str ?? '');
+                      details = startServerTool(ui, `${parsed.command} ${parsed.path}`, parsed.file_text ?? parsed.new_str ?? '');
                       break;
                     default:
                       console.warn('unhandled server tool:', serverToolName, parsed);
-                      startServerTool(ui, serverToolName, JSON.stringify(parsed, null, 2));
+                      details = startServerTool(ui, serverToolName, JSON.stringify(parsed, null, 2));
                       break;
+                  }
+                  if (details) {
+                    serverToolElements.set(serverToolId, details);
                   }
                 } catch {}
                 serverToolJson = '';
