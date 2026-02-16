@@ -53,8 +53,8 @@ function getChatRequest(text: string): ChatRequest {
 
 // --- Model config UI ---
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
-  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384 },
-  'claude-opus-4-6': { thinking: true },
+  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10 },
+  'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10 },
   'gpt-5': {},
 };
 
@@ -90,6 +90,8 @@ function saveModelConfig() {
   if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
+    const ws = document.getElementById('anthropic-web-search') as HTMLInputElement | null;
+    if (ws) configState[currentModel].web_search = ws.checked;
   }
   persistState();
 }
@@ -100,7 +102,9 @@ function renderModelConfig() {
   currentModel = model;
   if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
     const config = configState[model];
-    modelConfigDiv.innerHTML = `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>`;
+    modelConfigDiv.innerHTML =
+      `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
+      `<label><input type="checkbox" id="anthropic-web-search" ${config.web_search ? 'checked' : ''}> web search</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -156,6 +160,8 @@ type StreamingUI = {
   textSpan: HTMLSpanElement | null;
   thinkingDetails: HTMLDetailsElement | null;
   thinkingContent: HTMLElement | null;
+  searchDetails: HTMLDetailsElement | null;
+  searchContent: HTMLElement | null;
 };
 
 function createStreamingUI(): StreamingUI {
@@ -170,6 +176,8 @@ function createStreamingUI(): StreamingUI {
     textSpan: null,
     thinkingDetails: null,
     thinkingContent: null,
+    searchDetails: null,
+    searchContent: null,
   };
 }
 
@@ -202,6 +210,35 @@ function appendThinking(ui: StreamingUI, text: string) {
     ui.container.appendChild(ui.thinkingDetails);
   }
   ui.thinkingContent!.textContent += text;
+  scrollToBottom();
+}
+
+function startSearch(ui: StreamingUI, query: string) {
+  clearPlaceholder(ui);
+  // Each search gets its own <details> block
+  ui.searchDetails = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = `Search: ${query}`;
+  ui.searchDetails.appendChild(summary);
+  ui.searchContent = document.createElement('ul');
+  ui.searchContent.classList.add('link-list');
+  ui.searchDetails.appendChild(ui.searchContent);
+  ui.container.appendChild(ui.searchDetails);
+  scrollToBottom();
+}
+
+function addSearchResults(ui: StreamingUI, results: Array<{ title: string; url: string }>) {
+  if (!ui.searchContent) return;
+  for (const result of results) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = result.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = result.title;
+    li.appendChild(a);
+    ui.searchContent.appendChild(li);
+  }
   scrollToBottom();
 }
 
@@ -322,6 +359,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let searchQueryJson = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -345,10 +383,27 @@ async function streamChat(request: ChatRequest, files: File[]) {
                 appendText(ui, delta.text);
               } else if (delta.type === 'thinking_delta') {
                 appendThinking(ui, delta.thinking);
+              } else if (delta.type === 'input_json_delta') {
+                searchQueryJson += delta.partial_json;
               }
             } else if (raw.type === 'content_block_start') {
               if (raw.content_block?.type === 'text') {
                 ui.textSpan = null;
+              } else if (raw.content_block?.type === 'server_tool_use') {
+                searchQueryJson = '';
+              } else if (raw.content_block?.type === 'web_search_tool_result') {
+                const content = raw.content_block.content;
+                if (Array.isArray(content)) {
+                  addSearchResults(ui, content);
+                }
+              }
+            } else if (raw.type === 'content_block_stop') {
+              if (searchQueryJson) {
+                try {
+                  const parsed = JSON.parse(searchQueryJson);
+                  startSearch(ui, parsed.query);
+                } catch {}
+                searchQueryJson = '';
               }
             }
             break;

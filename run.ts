@@ -47,11 +47,15 @@ export type Sonnet45Config = {
   system?: string;
   thinking?: boolean;
   max_tokens?: number;
+  web_search?: boolean;
+  web_search_max_uses?: number;
 };
 
 export type Opus46Config = {
   model: 'claude-opus-4-6';
   thinking?: boolean;
+  web_search?: boolean;
+  web_search_max_uses?: number;
 };
 
 export type GPT5Config = {
@@ -118,6 +122,11 @@ async function streamAnthropicChat(
     const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
+    const tools: Anthropic.ToolUnion[] = [];
+    if (config.web_search) {
+      tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: config.web_search_max_uses ?? 10 });
+    }
+
     let streamParams: Anthropic.MessageStreamParams;
     switch (config.model) {
       case 'claude-sonnet-4-5': {
@@ -146,6 +155,10 @@ async function streamAnthropicChat(
         config satisfies never;
         throw new Error(`unknown model ${(config as { model: string }).model}`);
       }
+    }
+
+    if (tools.length > 0) {
+      streamParams.tools = tools;
     }
 
     const stream = anthropic.messages.stream(streamParams);

@@ -11,8 +11,11 @@ Streaming chat UI for multiple providers.
 - No build step. TypeScript is stripped at serve-time via `node:module`'s `stripTypeScriptTypes`. The `<script>` tag imports `.ts` directly; the server rewrites on the fly.
 - Types shared across client/server. `index.ts` does `import type { ... } from './run.ts'` to keep the interface in sync.
 - Raw provider events forwarded. Server wraps each provider's native stream events in `{ type: 'anthropic' | 'openai', event }` and forwards them. Client handles provider-specific rendering.
-- File handling is server-side. Client sends raw `File` objects via FormData; server builds provider-specific content blocks.
 - Config is per-model (`export type ChatConfig = Sonnet45Config | GPT5Config`). Per-model config and model selection saved to localStorage.
+
+## Constraints
+
+Never, ever use `as any`. If you absolutely must you can cast `as unknown as Whatever`, but only if you leave a comment explaining why this is necessary, but before doing so you should think about whether there is a way to express the thing you need without it.
 
 ## Type checking
 
