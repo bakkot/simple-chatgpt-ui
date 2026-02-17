@@ -961,6 +961,6 @@ sendBtn.addEventListener('click', sendMessage);
 textarea.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    if (!sendBtn.disabled) sendMessage();
   }
 });
