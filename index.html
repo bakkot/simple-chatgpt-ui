@@ -183,10 +183,98 @@ input[type=radio], input[type=checkbox] {
 .citation:hover {
   text-decoration: underline;
 }
+.history-button {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 0.4rem 1rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color: #888;
+  cursor: pointer;
+  margin: auto;
+}
+.history-button:hover {
+  background: #f0f0f0;
+}
+.history-dialog {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 36rem;
+  width: 90vw;
+  max-height: 70vh;
+  font: inherit;
+  color: var(--text-color);
+}
+.history-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+.history-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.2rem 0.5rem;
+}
+.history-dialog-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.history-dialog-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  color: #888;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
+.history-dialog-close:hover {
+  color: #444;
+}
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0;
+  overflow-y: auto;
+  max-height: calc(70vh - 4rem);
+}
+.history-item {
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+.history-item:hover {
+  background: #f0f0f0;
+}
+.history-item-preview {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+.history-item-meta {
+  font-size: 0.8rem;
+  color: #999;
+  white-space: nowrap;
+}
 </style>
 
 <div class="content">
-  <div class="messages" id="messages"></div>
+  <div class="messages" id="messages">
+    <button class="history-button" id="history-button">history</button>
+  </div>
+  <dialog class="history-dialog" id="history-dialog">
+    <div class="history-dialog-header">
+      <h3>History</h3>
+      <button class="history-dialog-close" id="history-dialog-close">&times;</button>
+    </div>
+    <ul class="history-list" id="history-list"></ul>
+  </dialog>
   <div class="bottom">
     <div class="model-select small-text" id="model-selection">
       <span>

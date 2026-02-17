@@ -13,6 +13,10 @@ const modelRadios = document.querySelectorAll<HTMLInputElement>('input[name="mod
 const attachLink = document.getElementById('attach')!;
 const attachContainer = document.getElementById('attach-container')!;
 const unattachLink = document.getElementById('unattach')!;
+const historyButton = document.getElementById('history-button')!;
+const historyDialog = document.getElementById('history-dialog') as HTMLDialogElement;
+const historyList = document.getElementById('history-list')!;
+const historyDialogClose = document.getElementById('history-dialog-close')!;
 
 // --- Conversation history persistence ---
 
@@ -174,6 +178,7 @@ function lockModelSelection() {
     for (const radio of modelRadios) {
       radio.disabled = true;
     }
+    historyButton.remove();
   }
 }
 
@@ -592,6 +597,46 @@ function addMessageDiv(isBot: boolean): HTMLElement {
   messagesDiv.appendChild(container);
   return text;
 }
+
+// --- History dialog ---
+
+function formatDate(ts: number): string {
+  return new Date(ts).toLocaleString();
+}
+
+function showHistoryDialog() {
+  const all = loadConversations();
+  const convs = Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt);
+
+  historyList.innerHTML = '';
+  for (const conv of convs) {
+    const preview = conv.turns.length > 0 ? extractUserText(conv.turns[0]) : '';
+    const li = document.createElement('li');
+    li.className = 'history-item';
+
+    const previewSpan = document.createElement('span');
+    previewSpan.className = 'history-item-preview';
+    previewSpan.textContent = preview || '(empty)';
+    li.appendChild(previewSpan);
+
+    const meta = document.createElement('span');
+    meta.className = 'history-item-meta';
+    meta.textContent = `${conv.config.model} \u00b7 ${formatDate(conv.updatedAt)}`;
+    li.appendChild(meta);
+
+    li.addEventListener('click', () => {
+      historyDialog.close();
+      restoreConversation(conv.id);
+    });
+
+    historyList.appendChild(li);
+  }
+
+  historyDialog.showModal();
+}
+
+historyButton.addEventListener('click', showHistoryDialog);
+historyDialogClose.addEventListener('click', () => historyDialog.close());
 
 // --- Send ---
 
