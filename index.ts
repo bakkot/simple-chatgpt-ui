@@ -1221,6 +1221,8 @@ async function restoreConversation(id: string) {
   currentConversation.container = conv.container;
   currentConversation.turns = conv.turns;
   currentConversation.updatedAt = conv.updatedAt;
+  currentConversation.preview = conv.preview;
+  currentConversation.bookmarked = conv.bookmarked;
 
   // Set provider-specific globals
   const model = conv.config.model;
