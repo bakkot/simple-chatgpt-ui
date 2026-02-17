@@ -76,7 +76,7 @@ export type Opus46Config = {
   container?: string;
 };
 
-export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export type GPT52Config = {
   model: 'gpt-5.2';

@@ -305,7 +305,7 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label>thinking <select id="config-reasoning-effort">` +
-        (['none', 'low', 'medium', 'high'] as const).map(v =>
+        (['none', 'low', 'medium', 'high', 'xhigh'] as const).map(v =>
           `<option value="${v}" ${config.reasoning_effort === v ? 'selected' : ''}>${v}</option>`
         ).join('') +
       `</select></label>` +
