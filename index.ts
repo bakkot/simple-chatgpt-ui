@@ -330,7 +330,10 @@ function loadSavedState() {
   } catch {}
 }
 
+let suppressPersist = false;
+
 function persistState() {
+  if (suppressPersist) return;
   const saved: SavedState = { model: getSelectedModel(), config: configState };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
 }
@@ -786,6 +789,8 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
           state.serverToolJson = '';
           state.serverToolName = '';
         }
+      } else if (raw.type === 'message_delta' && raw.delta.stop_reason === 'refusal') {
+        showError(ui.container, 'Message refused by Anthropic content policy');
       } else if (raw.type !== 'message_start' && raw.type !== 'message_delta' && raw.type !== 'message_stop') {
         raw satisfies never;
         console.warn('unhandled anthropic event type:', (raw as { type: string }).type, raw);
@@ -1149,6 +1154,7 @@ async function sendMessage() {
   sendBtn.disabled = true;
   textarea.value = '';
   fixupTextboxSize();
+  persistState();
   lockModelSelection();
 
   // Display user message
@@ -1336,12 +1342,15 @@ async function restoreConversation(id: string) {
     googleHistory = [];
   }
 
-  // Set model radio and config
+  // Set model radio and config — but don't persist to localStorage yet.
+  // Only persist when the user actually sends a message to this chat.
+  suppressPersist = true;
   const radio = document.querySelector<HTMLInputElement>(`input[name="model"][value="${model}"]`);
   if (radio) radio.checked = true;
   const { model: _, ...configFields } = conv.config;
   Object.assign(configState[model], configFields);
   renderModelConfig();
+  suppressPersist = false;
   lockModelSelection();
 
   // Clear and replay UI
