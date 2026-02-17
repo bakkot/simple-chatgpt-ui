@@ -246,6 +246,7 @@ input[type=radio], input[type=checkbox] {
   justify-content: space-between;
   align-items: baseline;
   gap: 1rem;
+  border-top: 1px solid #eee;
 }
 .history-item:hover {
   background: #f0f0f0;
@@ -262,6 +263,51 @@ input[type=radio], input[type=checkbox] {
   color: #999;
   white-space: nowrap;
 }
+.history-item-actions {
+  display: flex;
+  gap: 0.3rem;
+  align-items: baseline;
+}
+.history-item-action {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  font-size: 0.85rem;
+  color: #999;
+  line-height: 1;
+}
+.history-item-action:hover {
+  color: #444;
+}
+.confirm-dialog {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1.5rem;
+  font: inherit;
+  color: var(--text-color);
+}
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+.confirm-dialog-buttons {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+.confirm-dialog-buttons button {
+  padding: 0.3rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.confirm-dialog-buttons button:hover {
+  background: #f0f0f0;
+}
 </style>
 
 <div class="content">
@@ -274,6 +320,13 @@ input[type=radio], input[type=checkbox] {
       <button class="history-dialog-close" id="history-dialog-close">&times;</button>
     </div>
     <ul class="history-list" id="history-list"></ul>
+  </dialog>
+  <dialog class="confirm-dialog" id="confirm-dialog">
+    <div id="confirm-dialog-message"></div>
+    <div class="confirm-dialog-buttons">
+      <button id="confirm-dialog-cancel">Cancel</button>
+      <button id="confirm-dialog-ok">Delete</button>
+    </div>
   </dialog>
   <div class="bottom">
     <div class="model-select small-text" id="model-selection">
@@ -314,3 +367,7 @@ input[type=radio], input[type=checkbox] {
 
 <!-- the `.ts` import is intentional; we rewrite while serving rather than as a separate compilation step -->
 <script src="./index.ts"></script>
+
+<!-- icons from Feather: https://github.com/feathericons/feather/blob/593b3bf516087d07d362280b34ec1a5383e71572/LICENSE -->
+<!-- prettier-ignore -->
+<svg id="trash-icon" style="display:none" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>

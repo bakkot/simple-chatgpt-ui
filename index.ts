@@ -17,6 +17,10 @@ const historyButton = document.getElementById('history-button')!;
 const historyDialog = document.getElementById('history-dialog') as HTMLDialogElement;
 const historyList = document.getElementById('history-list')!;
 const historyDialogClose = document.getElementById('history-dialog-close')!;
+const confirmDialog = document.getElementById('confirm-dialog') as HTMLDialogElement;
+const confirmDialogMessage = document.getElementById('confirm-dialog-message')!;
+const confirmDialogCancel = document.getElementById('confirm-dialog-cancel')!;
+const confirmDialogOk = document.getElementById('confirm-dialog-ok')!;
 
 // --- Conversation history persistence ---
 
@@ -27,6 +31,7 @@ type Conversation = {
   container?: string;
   turns: StreamEvent[][];
   updatedAt: number;
+  bookmarked: boolean;
 };
 
 function generateId(): string {
@@ -43,13 +48,16 @@ const currentConversation: Conversation = {
   config: undefined as unknown as ChatConfig, // set on first turn
   history: [],
   turns: [],
+  bookmarked: false,
   updatedAt: 0,
 };
 
 function loadConversations(): Record<string, Conversation> {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) as Record<string, Conversation> : {};
+    if (!raw) return {};
+    const all = JSON.parse(raw) as Record<string, Conversation>;
+    return all;
   } catch { return {}; }
 }
 
@@ -57,6 +65,18 @@ function saveCurrentConversation() {
   currentConversation.updatedAt = Date.now();
   const all = loadConversations();
   all[currentConversation.id] = currentConversation;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+}
+
+function saveConversation(conv: Conversation) {
+  const all = loadConversations();
+  all[conv.id] = conv;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+}
+
+function deleteConversation(id: string) {
+  const all = loadConversations();
+  delete all[id];
   localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
 }
 
@@ -604,9 +624,30 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleString();
 }
 
+function confirmAction(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    confirmDialogMessage.innerHTML = message;
+    const cleanup = () => {
+      confirmDialogOk.removeEventListener('click', onOk);
+      confirmDialogCancel.removeEventListener('click', onCancel);
+      confirmDialog.removeEventListener('close', onClose);
+    };
+    const onOk = () => { cleanup(); confirmDialog.close(); resolve(true); };
+    const onCancel = () => { cleanup(); confirmDialog.close(); resolve(false); };
+    const onClose = () => { cleanup(); resolve(false); };
+    confirmDialogOk.addEventListener('click', onOk);
+    confirmDialogCancel.addEventListener('click', onCancel);
+    confirmDialog.addEventListener('close', onClose);
+    confirmDialog.showModal();
+  });
+}
+
 function showHistoryDialog() {
   const all = loadConversations();
-  const convs = Object.values(all).sort((a, b) => b.updatedAt - a.updatedAt);
+  const convs = Object.values(all).sort((a, b) => {
+    if (a.bookmarked !== b.bookmarked) return a.bookmarked ? -1 : 1;
+    return b.updatedAt - a.updatedAt;
+  });
 
   historyList.innerHTML = '';
   for (const conv of convs) {
@@ -623,6 +664,34 @@ function showHistoryDialog() {
     meta.className = 'history-item-meta';
     meta.textContent = `${conv.config.model} \u00b7 ${formatDate(conv.updatedAt)}`;
     li.appendChild(meta);
+
+    const actions = document.createElement('span');
+    actions.className = 'history-item-actions';
+
+    const bookmarkBtn = document.createElement('button');
+    bookmarkBtn.className = 'history-item-action';
+    bookmarkBtn.textContent = conv.bookmarked ? '\u2605' : '\u2606';
+    bookmarkBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      conv.bookmarked = !conv.bookmarked;
+      bookmarkBtn.textContent = conv.bookmarked ? '\u2605' : '\u2606';
+      saveConversation(conv);
+    });
+    actions.appendChild(bookmarkBtn);
+
+    const trashBtn = document.createElement('button');
+    trashBtn.className = 'history-item-action';
+    trashBtn.textContent = 'TRASH';
+    trashBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (e.shiftKey || await confirmAction('Delete this conversation? This cannot be undone.<br><br>Tip: hold "shift" while clicking the trash icon to skip this confirmation.')) {
+        deleteConversation(conv.id);
+        showHistoryDialog();
+      }
+    });
+    actions.appendChild(trashBtn);
+
+    li.appendChild(actions);
 
     li.addEventListener('click', () => {
       historyDialog.close();
