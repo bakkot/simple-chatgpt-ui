@@ -1,7 +1,7 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  GoogleContent, GoogleHistory,
+  GoogleContent, GoogleHistory, GroundingMetadata,
   Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, Gemini3ProConfig, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
@@ -493,6 +493,44 @@ function addSearchResults(ui: StreamingUI, results: Array<{ title: string; url: 
   scrollToBottom();
 }
 
+function renderGroundingMetadata(ui: StreamingUI, gm: GroundingMetadata) {
+  // Show search queries
+  if (gm.webSearchQueries) {
+    for (const query of gm.webSearchQueries) {
+      startSearch(ui, query);
+    }
+  }
+  // Show search result links
+  const chunks = gm.groundingChunks;
+  if (chunks && ui.searchContent) {
+    const results: Array<{ title: string; url: string }> = [];
+    for (const chunk of chunks) {
+      if (chunk.web?.uri && chunk.web.title) {
+        results.push({ title: chunk.web.title, url: chunk.web.uri });
+      }
+    }
+    if (results.length > 0) {
+      addSearchResults(ui, results);
+    }
+  }
+  // Inline citations
+  if (chunks && gm.groundingSupports) {
+    for (const support of gm.groundingSupports) {
+      if (!support.groundingChunkIndices?.length) continue;
+      for (const i of support.groundingChunkIndices) {
+        const chunk = chunks[i];
+        if (chunk?.web?.uri) {
+          appendCitation(ui, {
+            url: chunk.web.uri,
+            title: chunk.web.title ?? null,
+            cited_text: support.segment?.text ?? '',
+          });
+        }
+      }
+    }
+  }
+}
+
 function startServerTool(ui: StreamingUI, summary: string, body: string): HTMLDetailsElement {
   clearPlaceholder(ui);
   const details = document.createElement('details');
@@ -752,6 +790,10 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
           renderBase64Image(ui.container, part.inlineData.mimeType, part.inlineData.data);
           scrollToBottom();
         }
+      }
+      const gm = event.event.groundingMetadata;
+      if (gm) {
+        renderGroundingMetadata(ui, gm);
       }
       break;
     }

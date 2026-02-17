@@ -6,7 +6,7 @@ import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
-import type { Content as GoogleContent, Part as GooglePart } from '@google/genai';
+import type { Content as GoogleContent, Part as GooglePart, GroundingMetadata } from '@google/genai';
 
 const PORT = 21665; // 'gpt' in base 36
 
@@ -47,7 +47,7 @@ export type AnthropicStreamEvent = Anthropic.RawMessageStreamEvent | Anthropic.B
 export type AnthropicHistory = AnthropicMessageParam[];
 
 // --- Google types ---
-export type { GoogleContent, GooglePart };
+export type { GoogleContent, GooglePart, GroundingMetadata };
 export type GoogleHistory = GoogleContent[];
 
 // --- OpenAI types ---
@@ -107,7 +107,7 @@ export type ChatRequest =
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
-export type GoogleStreamChunk = { parts: GooglePart[] };
+export type GoogleStreamChunk = { parts: GooglePart[]; groundingMetadata?: GroundingMetadata };
 export type GoogleEvent = { type: 'google'; event: GoogleStreamChunk };
 export type DoneEvent =
   | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage; container?: string }
@@ -352,9 +352,11 @@ async function streamGoogleChat(
 
     const allParts: GooglePart[] = [];
     for await (const chunk of stream) {
-      const parts = chunk.candidates?.[0]?.content?.parts;
+      const candidate = chunk.candidates?.[0];
+      const parts = candidate?.content?.parts;
       if (parts && parts.length > 0) {
-        send({ type: 'google', event: { parts } });
+        const groundingMetadata = candidate?.groundingMetadata;
+        send({ type: 'google', event: { parts, groundingMetadata } });
         for (const part of parts) {
           // Merge consecutive text parts into one
           const last = allParts[allParts.length - 1];
