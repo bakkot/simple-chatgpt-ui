@@ -2,7 +2,7 @@ import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
   GoogleContent, GoogleHistory,
-  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, ChatConfig, ChatRequest, StreamEvent,
+  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, Gemini3ProConfig, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -114,7 +114,8 @@ function getChatRequest(text: string): ChatRequest {
         text,
       };
     }
-    case 'gemini-3-flash-preview': {
+    case 'gemini-3-flash-preview':
+    case 'gemini-3-pro-preview': {
       return {
         messages: googleHistory,
         config: { model },
@@ -134,6 +135,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
   'gemini-3-flash-preview': {},
+  'gemini-3-pro-preview': {},
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -884,7 +886,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
     if (model === 'gpt-5.2') {
       currentConversation.history = openaiHistory;
       currentConversation.container = openaiContainer;
-    } else if (model === 'gemini-3-flash-preview') {
+    } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
       currentConversation.history = googleHistory;
     } else {
       currentConversation.history = anthropicHistory;
@@ -952,7 +954,7 @@ function restoreConversation(id: string) {
     anthropicHistory = [];
     anthropicContainer = undefined;
     googleHistory = [];
-  } else if (model === 'gemini-3-flash-preview') {
+  } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
     googleHistory = conv.history as GoogleHistory;
     anthropicHistory = [];
     anthropicContainer = undefined;

@@ -88,14 +88,18 @@ export type Gemini3FlashConfig = {
   model: 'gemini-3-flash-preview';
 };
 
-export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig;
+export type Gemini3ProConfig = {
+  model: 'gemini-3-pro-preview';
+};
+
+export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig | Gemini3ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string }
   | { messages: OpenAIHistory; config: GPT52Config; text: string }
-  | { messages: GoogleHistory; config: Gemini3FlashConfig; text: string };
+  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini3ProConfig; text: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -320,7 +324,7 @@ async function streamGoogleChat(
   history: GoogleHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Gemini3FlashConfig,
+  config: Gemini3FlashConfig | Gemini3ProConfig,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -419,7 +423,8 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gemini-3-flash-preview': {
+    case 'gemini-3-flash-preview':
+    case 'gemini-3-pro-preview': {
       await streamGoogleChat(chat.messages as GoogleHistory, chat.text, files, chat.config, send);
       break;
     }
