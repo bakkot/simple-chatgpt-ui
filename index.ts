@@ -681,7 +681,10 @@ function showHistoryDialog() {
 
     const trashBtn = document.createElement('button');
     trashBtn.className = 'history-item-action';
-    trashBtn.textContent = 'TRASH';
+    const trashIcon = document.getElementById('trash-icon')!.cloneNode(true) as HTMLElement;
+    trashIcon.removeAttribute('style');
+    trashIcon.removeAttribute('id');
+    trashBtn.appendChild(trashIcon);
     trashBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (e.shiftKey || await confirmAction('Delete this conversation? This cannot be undone.<br><br>Tip: hold "shift" while clicking the trash icon to skip this confirmation.')) {
