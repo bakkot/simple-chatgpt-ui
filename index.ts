@@ -926,7 +926,11 @@ function processCodeBlocks(container: HTMLElement) {
 // --- UI helpers ---
 
 function scrollToBottom() {
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  const threshold = 50;
+  const distanceFromBottom = messagesDiv.scrollHeight - messagesDiv.scrollTop - messagesDiv.clientHeight;
+  if (distanceFromBottom <= threshold) {
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
 }
 
 function addMessageDiv(isBot: boolean): HTMLElement {
