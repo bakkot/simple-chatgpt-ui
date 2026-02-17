@@ -2,7 +2,7 @@ import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
   GoogleContent, GoogleHistory, GroundingMetadata,
-  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, Gemini3ProConfig, ChatConfig, ChatRequest, StreamEvent,
+  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, Gemini3ProConfig, ChatConfig, ChatRequest, StreamEvent, ReasoningEffort,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -226,7 +226,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
+  'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
   'gemini-3-pro-preview': { image_generation: false, google_search: false, code_execution: false },
 };
@@ -275,6 +275,8 @@ function saveModelConfig() {
     if (ig) configState[currentModel].image_generation = ig.checked;
     const ci = document.getElementById('config-code-interpreter') as HTMLInputElement | null;
     if (ci) configState[currentModel].code_interpreter = ci.checked;
+    const re = document.getElementById('config-reasoning-effort') as HTMLSelectElement | null;
+    if (re) configState[currentModel].reasoning_effort = re.value as ReasoningEffort;
   }
   if (currentModel === 'gemini-3-pro-preview') {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
@@ -302,6 +304,11 @@ function renderModelConfig() {
   } else if (model === 'gpt-5.2') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
+      `<label>thinking <select id="config-reasoning-effort">` +
+        (['none', 'low', 'medium', 'high'] as const).map(v =>
+          `<option value="${v}" ${config.reasoning_effort === v ? 'selected' : ''}>${v}</option>`
+        ).join('') +
+      `</select></label>` +
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
       `<label><input type="checkbox" id="config-code-interpreter" ${config.code_interpreter ? 'checked' : ''}> code execution</label>`;

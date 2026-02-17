@@ -76,12 +76,15 @@ export type Opus46Config = {
   container?: string;
 };
 
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
 export type GPT52Config = {
   model: 'gpt-5.2';
   web_search?: boolean;
   image_generation?: boolean;
   code_interpreter?: boolean;
   container?: string;
+  reasoning_effort?: ReasoningEffort;
 };
 
 export type Gemini3FlashConfig = {
@@ -280,10 +283,14 @@ async function streamOpenAIChat(
       });
     }
 
+    const reasoning = config.reasoning_effort && config.reasoning_effort !== 'none'
+      ? { effort: config.reasoning_effort } : undefined;
+
     const stream = await openai.responses.stream({
       model: config.model,
       input,
       tools: tools.length > 0 ? tools : undefined,
+      reasoning,
     });
 
     for await (const event of stream) {
