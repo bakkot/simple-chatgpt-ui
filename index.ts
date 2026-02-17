@@ -84,6 +84,7 @@ function deleteConversation(id: string) {
 let anthropicHistory: AnthropicHistory = [];
 let anthropicContainer: string | undefined;
 let openaiHistory: OpenAIHistory = [];
+let openaiContainer: string | undefined;
 let hasSentMessage = false;
 let pendingFiles: File[] = [];
 
@@ -107,7 +108,7 @@ function getChatRequest(text: string): ChatRequest {
     case 'gpt-5.2': {
       return {
         messages: openaiHistory,
-        config: { model, ...configState[model] },
+        config: { model, ...configState[model], container: openaiContainer },
         text,
       };
     }
@@ -122,7 +123,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5.2': { web_search: false, image_generation: false },
+  'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -167,6 +168,8 @@ function saveModelConfig() {
   if (currentModel === 'gpt-5.2') {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
+    const ci = document.getElementById('config-code-interpreter') as HTMLInputElement | null;
+    if (ci) configState[currentModel].code_interpreter = ci.checked;
   }
   persistState();
 }
@@ -185,7 +188,8 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
-      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>`;
+      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
+      `<label><input type="checkbox" id="config-code-interpreter" ${config.code_interpreter ? 'checked' : ''}> code execution</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -253,6 +257,7 @@ type TurnRenderState = {
   serverToolName: string;
   serverToolId: string;
   serverToolElements: Map<string, HTMLDetailsElement>;
+  openaiCodePres: Map<string, HTMLPreElement>;
 };
 
 function createStreamingUI(): StreamingUI {
@@ -280,6 +285,7 @@ function createTurnRenderState(): TurnRenderState {
     serverToolName: '',
     serverToolId: '',
     serverToolElements: new Map(),
+    openaiCodePres: new Map(),
   };
 }
 
@@ -537,11 +543,54 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
         } else {
           console.warn('unhandled openai annotation type:', ann.type, ann);
         }
+      } else if (raw.type === 'response.code_interpreter_call_code.delta') {
+        clearPlaceholder(ui);
+        let pre = state.openaiCodePres.get(raw.item_id);
+        if (!pre) {
+          const details = document.createElement('details');
+          const summary = document.createElement('summary');
+          summary.textContent = 'Code...';
+          details.appendChild(summary);
+          pre = document.createElement('pre');
+          details.appendChild(pre);
+          ui.container.appendChild(details);
+          state.openaiCodePres.set(raw.item_id, pre);
+          state.serverToolElements.set(raw.item_id, details);
+        }
+        pre.textContent += raw.delta;
+        scrollToBottom();
+      } else if (raw.type === 'response.code_interpreter_call_code.done') {
+        // Update summary to first line of code
+        const details = state.serverToolElements.get(raw.item_id);
+        if (details) {
+          const summary = details.querySelector('summary');
+          if (summary) {
+            const firstLine = raw.code.split('\n')[0];
+            summary.textContent = firstLine || 'Code';
+          }
+        }
       } else if (raw.type === 'response.output_item.done') {
         const item = raw.item;
         if (item.type === 'web_search_call' && item.action.type === 'search') {
           const query = item.action.queries?.join(', ') ?? item.action.query;
           startSearch(ui, query);
+        } else if (item.type === 'code_interpreter_call' && item.outputs) {
+          const details = state.serverToolElements.get(item.id);
+          for (const output of item.outputs) {
+            if (output.type === 'logs') {
+              const pre = document.createElement('pre');
+              pre.textContent = output.logs || '(no output)';
+              if (details) {
+                details.appendChild(pre);
+              } else {
+                ui.container.appendChild(pre);
+              }
+            } else if (output.type === 'image') {
+              clearPlaceholder(ui);
+              renderImage(details ?? ui.container, output.url);
+            }
+          }
+          scrollToBottom();
         }
       } else if (
         raw.type !== 'response.created' &&
@@ -562,7 +611,10 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
         raw.type !== 'response.image_generation_call.in_progress' &&
         raw.type !== 'response.image_generation_call.generating' &&
         raw.type !== 'response.image_generation_call.partial_image' &&
-        raw.type !== 'response.image_generation_call.completed'
+        raw.type !== 'response.image_generation_call.completed' &&
+        raw.type !== 'response.code_interpreter_call.in_progress' &&
+        raw.type !== 'response.code_interpreter_call.interpreting' &&
+        raw.type !== 'response.code_interpreter_call.completed'
       ) {
         console.warn('unhandled openai event type:', raw.type, raw);
       }
@@ -796,6 +848,9 @@ async function streamChat(request: ChatRequest, files: File[]) {
             for (const item of event.assistantMessage.output) {
               openaiHistory.push(item);
             }
+            if (event.container) {
+              openaiContainer = event.container;
+            }
           }
         }
       }
@@ -806,6 +861,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
     const model = request.config.model;
     if (model === 'gpt-5.2') {
       currentConversation.history = openaiHistory;
+      currentConversation.container = openaiContainer;
     } else {
       currentConversation.history = anthropicHistory;
       currentConversation.container = anthropicContainer;
@@ -861,12 +917,14 @@ function restoreConversation(id: string) {
   const model = conv.config.model;
   if (model === 'gpt-5.2') {
     openaiHistory = conv.history as OpenAIHistory;
+    openaiContainer = conv.container;
     anthropicHistory = [];
     anthropicContainer = undefined;
   } else {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];
+    openaiContainer = undefined;
   }
 
   // Set model radio and config

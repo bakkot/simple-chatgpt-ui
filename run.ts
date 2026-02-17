@@ -69,6 +69,8 @@ export type GPT52Config = {
   model: 'gpt-5.2';
   web_search?: boolean;
   image_generation?: boolean;
+  code_interpreter?: boolean;
+  container?: string;
 };
 
 export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config;
@@ -84,7 +86,7 @@ export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
 export type DoneEvent =
   | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage; container?: string }
-  | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse };
+  | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse; container?: string };
 export type ErrorEvent = { type: 'error'; error: string };
 export type StreamEvent = AnthropicEvent | OpenAIEvent | DoneEvent | ErrorEvent;
 
@@ -243,6 +245,12 @@ async function streamOpenAIChat(
     if (config.image_generation) {
       tools.push({ type: 'image_generation' });
     }
+    if (config.code_interpreter) {
+      tools.push({
+        type: 'code_interpreter',
+        container: config.container ?? { type: 'auto' },
+      });
+    }
 
     const stream = await openai.responses.stream({
       model: config.model,
@@ -255,7 +263,15 @@ async function streamOpenAIChat(
     }
 
     const assistantMessage = await stream.finalResponse();
-    send({ type: 'done', provider: 'openai', userInput, assistantMessage });
+    // Extract container_id from code_interpreter_call output items for round-tripping
+    let container: string | undefined;
+    for (const item of assistantMessage.output) {
+      if (item.type === 'code_interpreter_call') {
+        container = item.container_id;
+        break;
+      }
+    }
+    send({ type: 'done', provider: 'openai', userInput, assistantMessage, container });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });
   }
