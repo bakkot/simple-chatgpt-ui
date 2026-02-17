@@ -56,7 +56,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5.2': { web_search: false },
+  'gpt-5.2': { web_search: false, image_generation: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -98,6 +98,10 @@ function saveModelConfig() {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
+  if (currentModel === 'gpt-5.2') {
+    const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
+    if (ig) configState[currentModel].image_generation = ig.checked;
+  }
   persistState();
 }
 
@@ -114,7 +118,8 @@ function renderModelConfig() {
   } else if (model === 'gpt-5.2') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
-      `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>`;
+      `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
+      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -563,7 +568,11 @@ async function streamChat(request: ChatRequest, files: File[]) {
               raw.type !== 'response.reasoning_summary_part.done' &&
               raw.type !== 'response.web_search_call.in_progress' &&
               raw.type !== 'response.web_search_call.searching' &&
-              raw.type !== 'response.web_search_call.completed'
+              raw.type !== 'response.web_search_call.completed' &&
+              raw.type !== 'response.image_generation_call.in_progress' &&
+              raw.type !== 'response.image_generation_call.generating' &&
+              raw.type !== 'response.image_generation_call.partial_image' &&
+              raw.type !== 'response.image_generation_call.completed'
             ) {
               console.warn('unhandled openai event type:', raw.type, raw);
             }

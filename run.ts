@@ -68,6 +68,7 @@ export type Opus46Config = {
 export type GPT52Config = {
   model: 'gpt-5.2';
   web_search?: boolean;
+  image_generation?: boolean;
 };
 
 export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config;
@@ -174,7 +175,7 @@ async function streamAnthropicChat(
     const stream = anthropic.beta.messages.stream({
       ...baseParams,
       tools: tools.length > 0 ? tools : undefined,
-      betas: config.code_execution ? ['code-execution-2025-08-25'] : [],
+      betas: config.code_execution ? ['code-execution-2025-08-25'] : undefined,
       container: config.container ?? undefined,
     });
 
@@ -238,6 +239,9 @@ async function streamOpenAIChat(
     const tools: OpenAI.Responses.Tool[] = [];
     if (config.web_search) {
       tools.push({ type: 'web_search' });
+    }
+    if (config.image_generation) {
+      tools.push({ type: 'image_generation' });
     }
 
     const stream = await openai.responses.stream({

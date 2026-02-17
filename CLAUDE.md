@@ -12,6 +12,9 @@ Streaming chat UI for multiple providers.
 - Types shared across client/server. `index.ts` does `import type { ... } from './run.ts'` to keep the interface in sync.
 - Raw provider events forwarded. Server wraps each provider's native stream events in `{ type: 'anthropic' | 'openai', event }` and forwards them. Client handles provider-specific rendering.
 - Config is per-model (`export type ChatConfig = Sonnet45Config | GPT5Config`). Per-model config and model selection saved to localStorage.
+- Tools are per-provider. Anthropic uses beta tool types (`BetaToolUnion`); OpenAI uses `OpenAI.Responses.Tool`. Each provider's streaming function builds a tools array from config booleans and passes it to the SDK.
+- The client renders streaming events inline (text deltas, thinking, search, citations) and defers some output to the `done` event (e.g. OpenAI image generation results, which arrive as `image_generation_call` items in the final response output).
+- When adding new OpenAI streaming event types, add them to the ignored-events guard in the `case 'openai'` branch to suppress console warnings.
 
 ## Constraints
 
