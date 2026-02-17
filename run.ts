@@ -9,6 +9,7 @@ import { GoogleGenAI } from '@google/genai';
 import type { Content as GoogleContent, Part as GooglePart, GroundingMetadata } from '@google/genai';
 
 const PORT = 21665; // 'gpt' in base 36
+const LOGS = true;
 
 function readKeyOrEmpty(name: string) {
   try {
@@ -443,8 +444,13 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  const allEvents: StreamEvent[] = [];
+  let doneEvent: DoneEvent | undefined;
+
   function send(event: StreamEvent) {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
+    allEvents.push(event);
+    if (event.type === 'done') doneEvent = event;
   }
 
   switch (chat.config.model) {
@@ -466,6 +472,31 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       chat.config satisfies never; // assert switch exhaustiveness
       throw new Error(`unknown model ${(chat.config as { model: string }).model}`);
     }
+  }
+
+  if (LOGS) {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const dir = path.join(import.meta.dirname, 'outputs', chatUser);
+    fs.mkdirSync(dir, { recursive: true });
+    const log: Record<string, unknown> = {
+      config: chat.config,
+      userMessage: chat.text,
+      events: allEvents,
+    };
+    if (doneEvent) {
+      if (doneEvent.provider === 'anthropic') {
+        log.assistantMessage = doneEvent.assistantMessage;
+        log.container = doneEvent.container;
+      } else if (doneEvent.provider === 'openai') {
+        log.assistantMessage = doneEvent.assistantMessage;
+        log.container = doneEvent.container;
+      } else {
+        log.assistantMessage = doneEvent.assistantContent;
+      }
+    }
+    fs.writeFileSync(path.join(dir, `${timestamp}.json`), JSON.stringify(log));
   }
 
   res.end();
