@@ -425,6 +425,12 @@ app.post('/check-user', (req, res) => {
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, fieldSize: 50 * 1024 * 1024 } });
 
 app.post('/chat', upload.array('files'), async (req, res) => {
+  const chatUser = req.body.user;
+  if (!chatUser || !ALLOWED_USERS.includes(chatUser)) {
+    res.status(403).send('invalid user');
+    return;
+  }
+
   const chat: ChatRequest = {
     messages: JSON.parse(req.body.messages),
     config: JSON.parse(req.body.config),

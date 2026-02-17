@@ -18,10 +18,89 @@ const historyButton = document.getElementById('history-button')!;
 const historyDialog = document.getElementById('history-dialog') as HTMLDialogElement;
 const historyList = document.getElementById('history-list')!;
 const historyDialogClose = document.getElementById('history-dialog-close')!;
+const userDialog = document.querySelector('dialog.user') as HTMLDialogElement;
+const userInput = userDialog.querySelector('.user-input') as HTMLInputElement;
+const userStatus = document.getElementById('user-status')!;
+const userConfirmBtn = document.getElementById('user-confirm') as HTMLButtonElement;
 const confirmDialog = document.getElementById('confirm-dialog') as HTMLDialogElement;
 const confirmDialogMessage = document.getElementById('confirm-dialog-message')!;
 const confirmDialogCancel = document.getElementById('confirm-dialog-cancel')!;
 const confirmDialogOk = document.getElementById('confirm-dialog-ok')!;
+
+// --- User authentication ---
+
+let user: string | undefined;
+
+async function isUserGood(username: string): Promise<{ good: boolean; error?: string }> {
+  try {
+    const resp = await fetch('/check-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: username }),
+    });
+    const text = await resp.text();
+    if (text === 'ok') return { good: true };
+    return { good: false, error: 'unknown user' };
+  } catch (err) {
+    return { good: false, error: 'network error' };
+  }
+}
+
+async function confirmUser() {
+  const attemptedUser = userInput.value.trim();
+  if (!attemptedUser) return;
+  userStatus.style.color = 'initial';
+  userStatus.innerText = 'checking...';
+
+  const { good, error } = await isUserGood(attemptedUser);
+  if (good) {
+    user = attemptedUser;
+    userStatus.innerText = 'ok!';
+    if ((document.getElementById('save-user') as HTMLInputElement).checked) {
+      localStorage.setItem('chatgpt-ui-user', user);
+    }
+    setTimeout(() => userDialog.close(), 500);
+  } else {
+    userStatus.style.color = 'red';
+    userStatus.innerText = error ?? 'unknown error';
+  }
+}
+
+userConfirmBtn.addEventListener('click', confirmUser);
+userInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    confirmUser();
+  }
+});
+
+async function ensureUser(): Promise<void> {
+  if (user) return;
+
+  const saved = localStorage.getItem('chatgpt-ui-user');
+  if (saved) {
+    const { good } = await isUserGood(saved);
+    if (good) {
+      user = saved;
+      return;
+    }
+    localStorage.removeItem('chatgpt-ui-user');
+  }
+
+  userDialog.showModal();
+  return new Promise((resolve) => {
+    const observer = new MutationObserver(() => {
+      if (!userDialog.open && user) {
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(userDialog, { attributes: true });
+  });
+}
+
+// Check user on page load
+ensureUser();
 
 // --- Conversation history persistence ---
 
@@ -1103,6 +1182,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
   formData.append('messages', JSON.stringify(request.messages));
   formData.append('config', JSON.stringify(request.config));
   formData.append('text', request.text);
+  formData.append('user', user!);
   for (const file of files) {
     formData.append('files', file);
   }
@@ -1112,6 +1192,12 @@ async function streamChat(request: ChatRequest, files: File[]) {
       method: 'POST',
       body: formData,
     });
+
+    if (!resp.ok) {
+      const body = await resp.text();
+      showError(state.ui.container, `Error: ${resp.status} ${body}`);
+      return;
+    }
 
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
@@ -1157,20 +1243,23 @@ async function streamChat(request: ChatRequest, files: File[]) {
       }
     }
     processCodeBlocks(state.ui.container);
-    // Persist completed turn
-    currentConversation.turns.push(turnEvents);
-    currentConversation.config = request.config;
-    const model = request.config.model;
-    if (model === 'gpt-5.2') {
-      currentConversation.history = openaiHistory;
-      currentConversation.container = openaiContainer;
-    } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
-      currentConversation.history = googleHistory;
-    } else {
-      currentConversation.history = anthropicHistory;
-      currentConversation.container = anthropicContainer;
+    // Only persist if the turn completed successfully (got a done event)
+    const gotDone = turnEvents.some(e => e.type === 'done');
+    if (gotDone) {
+      currentConversation.turns.push(turnEvents);
+      currentConversation.config = request.config;
+      const model = request.config.model;
+      if (model === 'gpt-5.2') {
+        currentConversation.history = openaiHistory;
+        currentConversation.container = openaiContainer;
+      } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
+        currentConversation.history = googleHistory;
+      } else {
+        currentConversation.history = anthropicHistory;
+        currentConversation.container = anthropicContainer;
+      }
+      await saveCurrentConversation(turnEvents);
     }
-    await saveCurrentConversation(turnEvents);
   } catch (err: any) {
     showError(state.ui.container, `Error: ${err.message}`);
   }

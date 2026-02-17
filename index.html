@@ -281,6 +281,19 @@ input[type=radio], input[type=checkbox] {
 .history-item-action:hover {
   color: #444;
 }
+.user {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 1.5rem;
+  font: inherit;
+  color: var(--text-color);
+}
+.user::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+.user-input {
+  margin-top: 0.5rem;
+}
 .confirm-dialog {
   border: 1px solid #ccc;
   border-radius: 8px;
@@ -363,6 +376,17 @@ input[type=radio], input[type=checkbox] {
       <button class="history-dialog-close" id="history-dialog-close">&times;</button>
     </div>
     <ul class="history-list" id="history-list"></ul>
+  </dialog>
+  <dialog class="user">
+    Enter the username you were given:<br>
+    <input autofocus class="user-input" size=56 style="font-size:1.2rem"><br><br>
+    <span id="user-status"></span>
+    <span id="user-confirm-box">
+      <label for="save-user">remember me</label>
+      <input type="checkbox" id="save-user" checked>
+      &nbsp;
+      <input type="button" value="confirm" id="user-confirm">
+    </span>
   </dialog>
   <dialog class="confirm-dialog" id="confirm-dialog">
     <div id="confirm-dialog-message"></div>
