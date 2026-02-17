@@ -284,7 +284,7 @@ async function streamOpenAIChat(
     }
 
     const reasoning = config.reasoning_effort && config.reasoning_effort !== 'none'
-      ? { effort: config.reasoning_effort } : undefined;
+      ? { effort: config.reasoning_effort, summary: 'auto' as const } : undefined;
 
     const stream = await openai.responses.stream({
       model: config.model,

@@ -309,6 +309,48 @@ input[type=radio], input[type=checkbox] {
 .confirm-dialog-buttons button:hover {
   background: #f0f0f0;
 }
+.code-block-container {
+  position: relative;
+  margin: 0.5em 0;
+  background-color: #f0f0f0;
+  border-radius: 4px;
+  padding: 0;
+}
+.code-block-container pre {
+  margin: 0;
+  padding: 1em;
+  overflow-x: auto;
+  background-color: transparent;
+  border-radius: 4px;
+}
+.code-block-container code {
+  font-family: monospace;
+  font-size: 0.9em;
+  display: block;
+  white-space: pre;
+  background: none;
+  padding: 0;
+}
+.copy-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 3px 6px;
+  font-size: 0.8em;
+  cursor: pointer;
+  background-color: #ddd;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+  z-index: 1;
+}
+.code-block-container:hover .copy-button {
+  opacity: 1;
+}
+.copy-button:active {
+  background-color: #bbb;
+}
 </style>
 
 <div class="content">

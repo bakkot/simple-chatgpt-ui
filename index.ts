@@ -707,7 +707,7 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
       const raw = event.event;
       if (raw.type === 'response.output_text.delta') {
         appendText(ui, raw.delta);
-      } else if (raw.type === 'response.reasoning_text.delta') {
+      } else if (raw.type === 'response.reasoning_text.delta' || raw.type === 'response.reasoning_summary_text.delta') {
         appendThinking(ui, raw.delta);
       } else if (raw.type === 'response.output_text.annotation.added') {
         const ann = raw.annotation as { type: string; url: string; title: string };
@@ -774,7 +774,6 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
         raw.type !== 'response.content_part.done' &&
         raw.type !== 'response.output_text.done' &&
         raw.type !== 'response.reasoning_text.done' &&
-        raw.type !== 'response.reasoning_summary_text.delta' &&
         raw.type !== 'response.reasoning_summary_text.done' &&
         raw.type !== 'response.reasoning_summary_part.added' &&
         raw.type !== 'response.reasoning_summary_part.done' &&
@@ -846,6 +845,81 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
       showError(ui.container, `Error: got bad message type ${(event as { type: string }).type}`);
       break;
     }
+  }
+}
+
+// --- Code block rendering ---
+
+function createCopyButton(codeContent: string): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.textContent = 'Copy';
+  button.className = 'copy-button';
+  button.addEventListener('click', () => {
+    navigator.clipboard.writeText(codeContent).then(() => {
+      button.textContent = 'Copied!';
+      button.style.backgroundColor = '#aeffae';
+      setTimeout(() => {
+        button.textContent = 'Copy';
+        button.style.backgroundColor = '';
+      }, 2000);
+    }).catch(() => {
+      button.textContent = 'Error';
+      button.style.backgroundColor = '#ffaaaa';
+      setTimeout(() => {
+        button.textContent = 'Copy';
+        button.style.backgroundColor = '';
+      }, 2000);
+    });
+  });
+  return button;
+}
+
+function processCodeBlocks(container: HTMLElement) {
+  const codeBlockRegex = /```(\w*)\n([\s\S]*?)\n```/g;
+  // Collect spans to process (avoid mutating while iterating)
+  const spans = Array.from(container.querySelectorAll<HTMLSpanElement>(':scope > span'));
+  for (const span of spans) {
+    const text = span.textContent ?? '';
+    if (!codeBlockRegex.test(text)) continue;
+    codeBlockRegex.lastIndex = 0;
+
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        const before = document.createElement('span');
+        before.textContent = text.substring(lastIndex, match.index);
+        fragment.appendChild(before);
+      }
+
+      const lang = match[1];
+      const codeContent = match[2];
+
+      const codeContainer = document.createElement('div');
+      codeContainer.className = 'code-block-container';
+
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      if (lang) code.className = `language-${lang}`;
+      code.textContent = codeContent;
+      pre.appendChild(code);
+
+      codeContainer.appendChild(createCopyButton(codeContent));
+      codeContainer.appendChild(pre);
+      fragment.appendChild(codeContainer);
+
+      lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      const after = document.createElement('span');
+      after.textContent = text.substring(lastIndex);
+      fragment.appendChild(after);
+    }
+
+    span.replaceWith(fragment);
   }
 }
 
@@ -1067,6 +1141,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
         }
       }
     }
+    processCodeBlocks(state.ui.container);
     // Persist completed turn
     currentConversation.turns.push(turnEvents);
     currentConversation.config = request.config;
@@ -1177,6 +1252,7 @@ async function restoreConversation(id: string) {
     for (const event of turnEvents) {
       renderStreamEvent(state, event);
     }
+    processCodeBlocks(state.ui.container);
   }
   scrollToBottom();
 }
