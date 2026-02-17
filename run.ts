@@ -86,11 +86,13 @@ export type GPT52Config = {
 
 export type Gemini3FlashConfig = {
   model: 'gemini-3-flash-preview';
+  google_search?: boolean;
 };
 
 export type Gemini3ProConfig = {
   model: 'gemini-3-pro-preview';
   image_generation?: boolean;
+  google_search?: boolean;
 };
 
 export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig | Gemini3ProConfig;
@@ -337,6 +339,9 @@ async function streamGoogleChat(
     if (config.model === 'gemini-3-pro-preview' && config.image_generation) {
       model = 'gemini-3-pro-image-preview';
       generateConfig = { responseModalities: ['TEXT', 'IMAGE'] };
+    }
+    if (config.google_search) {
+      generateConfig = { ...generateConfig, tools: [{ googleSearch: {} }] };
     }
 
     const stream = await google.models.generateContentStream({

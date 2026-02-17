@@ -227,8 +227,8 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
-  'gemini-3-flash-preview': {},
-  'gemini-3-pro-preview': { image_generation: false },
+  'gemini-3-flash-preview': { google_search: false },
+  'gemini-3-pro-preview': { image_generation: false, google_search: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -280,6 +280,10 @@ function saveModelConfig() {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
   }
+  if (currentModel === 'gemini-3-flash-preview' || currentModel === 'gemini-3-pro-preview') {
+    const gs = document.getElementById('config-google-search') as HTMLInputElement | null;
+    if (gs) configState[currentModel].google_search = gs.checked;
+  }
   persistState();
 }
 
@@ -302,7 +306,12 @@ function renderModelConfig() {
   } else if (model === 'gemini-3-pro-preview') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
+      `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>`;
+  } else if (model === 'gemini-3-flash-preview') {
+    const config = configState[model];
+    modelConfigDiv.innerHTML =
+      `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
