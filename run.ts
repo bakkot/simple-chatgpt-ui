@@ -90,6 +90,7 @@ export type Gemini3FlashConfig = {
 
 export type Gemini3ProConfig = {
   model: 'gemini-3-pro-preview';
+  image_generation?: boolean;
 };
 
 export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig | Gemini3ProConfig;
@@ -331,9 +332,17 @@ async function streamGoogleChat(
     const userContent = buildGoogleUserContent(text, files);
     history.push(userContent);
 
+    let model: string = config.model;
+    let generateConfig: Record<string, unknown> | undefined;
+    if (config.model === 'gemini-3-pro-preview' && config.image_generation) {
+      model = 'gemini-3-pro-image-preview';
+      generateConfig = { responseModalities: ['TEXT', 'IMAGE'] };
+    }
+
     const stream = await google.models.generateContentStream({
-      model: config.model,
+      model,
       contents: history,
+      config: generateConfig,
     });
 
     const allParts: GooglePart[] = [];

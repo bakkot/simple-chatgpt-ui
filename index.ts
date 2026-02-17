@@ -114,11 +114,17 @@ function getChatRequest(text: string): ChatRequest {
         text,
       };
     }
-    case 'gemini-3-flash-preview':
-    case 'gemini-3-pro-preview': {
+    case 'gemini-3-flash-preview': {
       return {
         messages: googleHistory,
         config: { model },
+        text,
+      };
+    }
+    case 'gemini-3-pro-preview': {
+      return {
+        messages: googleHistory,
+        config: { model, ...configState[model] },
         text,
       };
     }
@@ -135,7 +141,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
   'gemini-3-flash-preview': {},
-  'gemini-3-pro-preview': {},
+  'gemini-3-pro-preview': { image_generation: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -183,6 +189,10 @@ function saveModelConfig() {
     const ci = document.getElementById('config-code-interpreter') as HTMLInputElement | null;
     if (ci) configState[currentModel].code_interpreter = ci.checked;
   }
+  if (currentModel === 'gemini-3-pro-preview') {
+    const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
+    if (ig) configState[currentModel].image_generation = ig.checked;
+  }
   persistState();
 }
 
@@ -202,6 +212,10 @@ function renderModelConfig() {
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
       `<label><input type="checkbox" id="config-code-interpreter" ${config.code_interpreter ? 'checked' : ''}> code execution</label>`;
+  } else if (model === 'gemini-3-pro-preview') {
+    const config = configState[model];
+    modelConfigDiv.innerHTML =
+      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -637,6 +651,10 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
       for (const part of event.event.parts) {
         if (part.text != null) {
           appendText(ui, part.text);
+        } else if (part.inlineData?.data && part.inlineData.mimeType) {
+          clearPlaceholder(ui);
+          renderBase64Image(ui.container, part.inlineData.mimeType, part.inlineData.data);
+          scrollToBottom();
         }
       }
       break;
