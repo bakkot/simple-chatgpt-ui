@@ -25,14 +25,24 @@ const confirmDialogOk = document.getElementById('confirm-dialog-ok')!;
 
 // --- Conversation history persistence ---
 
-type Conversation = {
+type ConversationMeta = {
   id: string;
   config: ChatConfig;
   history: AnthropicHistory | OpenAIHistory | GoogleHistory;
   container?: string;
-  turns: StreamEvent[][];
   updatedAt: number;
   bookmarked: boolean;
+  preview: string;
+};
+
+type Conversation = ConversationMeta & {
+  turns: StreamEvent[][];
+};
+
+type TurnRecord = {
+  conversationId: string;
+  turnIndex: number;
+  events: StreamEvent[];
 };
 
 function generateId(): string {
@@ -42,7 +52,33 @@ function generateId(): string {
   return id;
 }
 
-const HISTORY_KEY = 'chatbot-history';
+// Turns are stored separately from conversation metadata so that appending a
+// new turn after streaming is a single put() — no need to read-modify-write the
+// entire conversation. This also keeps the conversations store lightweight for
+// the history dialog (no need to load potentially large event arrays with
+// embedded base64 images just to list conversations).
+const DB_NAME = 'chatbot-history';
+const DB_VERSION = 1;
+let dbConnection: IDBDatabase | undefined;
+
+function openDB(): Promise<IDBDatabase> {
+  if (dbConnection) return Promise.resolve(dbConnection);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('conversations')) {
+        db.createObjectStore('conversations', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('turns')) {
+        const turns = db.createObjectStore('turns', { keyPath: ['conversationId', 'turnIndex'] });
+        turns.createIndex('conversationId', 'conversationId');
+      }
+    };
+    req.onsuccess = () => { dbConnection = req.result; resolve(req.result); };
+    req.onerror = () => reject(req.error);
+  });
+}
 
 const currentConversation: Conversation = {
   id: generateId(),
@@ -51,34 +87,85 @@ const currentConversation: Conversation = {
   turns: [],
   bookmarked: false,
   updatedAt: 0,
+  preview: '',
 };
 
-function loadConversations(): Record<string, Conversation> {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return {};
-    const all = JSON.parse(raw) as Record<string, Conversation>;
-    return all;
-  } catch { return {}; }
+async function loadConversations(): Promise<ConversationMeta[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('conversations', 'readonly');
+    const req = tx.objectStore('conversations').getAll();
+    req.onsuccess = () => resolve(req.result as ConversationMeta[]);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-function saveCurrentConversation() {
+async function saveCurrentConversation(turnEvents?: StreamEvent[]): Promise<void> {
   currentConversation.updatedAt = Date.now();
-  const all = loadConversations();
-  all[currentConversation.id] = currentConversation;
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  if (turnEvents && currentConversation.turns.length === 1 && !currentConversation.preview) {
+    currentConversation.preview = extractUserText(turnEvents);
+  }
+  const db = await openDB();
+  const tx = db.transaction(['conversations', 'turns'], 'readwrite');
+  const { turns: _, ...meta } = currentConversation;
+  tx.objectStore('conversations').put(meta);
+  if (turnEvents) {
+    const turnRecord: TurnRecord = {
+      conversationId: currentConversation.id,
+      turnIndex: currentConversation.turns.length - 1,
+      events: turnEvents,
+    };
+    tx.objectStore('turns').put(turnRecord);
+  }
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
-function saveConversation(conv: Conversation) {
-  const all = loadConversations();
-  all[conv.id] = conv;
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+async function saveConversation(conv: ConversationMeta): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction('conversations', 'readwrite');
+  tx.objectStore('conversations').put(conv);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
-function deleteConversation(id: string) {
-  const all = loadConversations();
-  delete all[id];
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+async function deleteConversation(id: string): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(['conversations', 'turns'], 'readwrite');
+  tx.objectStore('conversations').delete(id);
+  const turnsIndex = tx.objectStore('turns').index('conversationId');
+  const cursorReq = turnsIndex.openKeyCursor(IDBKeyRange.only(id));
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result;
+    if (cursor) {
+      tx.objectStore('turns').delete(cursor.primaryKey);
+      cursor.continue();
+    }
+  };
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadConversation(id: string): Promise<Conversation> {
+  const db = await openDB();
+  const tx = db.transaction(['conversations', 'turns'], 'readonly');
+  const metaReq = tx.objectStore('conversations').get(id);
+  const turnsReq = tx.objectStore('turns').index('conversationId').getAll(id);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      const meta = metaReq.result as ConversationMeta | undefined;
+      if (!meta) { reject(new Error(`conversation ${id} not found`)); return; }
+      const turnRecords = (turnsReq.result as TurnRecord[]).sort((a, b) => a.turnIndex - b.turnIndex);
+      resolve({ ...meta, turns: turnRecords.map(t => t.events) });
+    };
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // --- Per-provider conversation history ---
@@ -733,16 +820,15 @@ function confirmAction(message: string): Promise<boolean> {
   });
 }
 
-function showHistoryDialog() {
-  const all = loadConversations();
-  const convs = Object.values(all).sort((a, b) => {
+async function showHistoryDialog() {
+  const convs = (await loadConversations()).sort((a, b) => {
     if (a.bookmarked !== b.bookmarked) return a.bookmarked ? -1 : 1;
     return b.updatedAt - a.updatedAt;
   });
 
   historyList.innerHTML = '';
   for (const conv of convs) {
-    const preview = conv.turns.length > 0 ? extractUserText(conv.turns[0]) : '';
+    const preview = conv.preview;
     const li = document.createElement('li');
     li.className = 'history-item';
 
@@ -762,11 +848,11 @@ function showHistoryDialog() {
     const bookmarkBtn = document.createElement('button');
     bookmarkBtn.className = 'history-item-action';
     bookmarkBtn.textContent = conv.bookmarked ? '\u2605' : '\u2606';
-    bookmarkBtn.addEventListener('click', (e) => {
+    bookmarkBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       conv.bookmarked = !conv.bookmarked;
       bookmarkBtn.textContent = conv.bookmarked ? '\u2605' : '\u2606';
-      saveConversation(conv);
+      await saveConversation(conv);
     });
     actions.appendChild(bookmarkBtn);
 
@@ -779,17 +865,17 @@ function showHistoryDialog() {
     trashBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (e.shiftKey || await confirmAction('Delete this conversation? This cannot be undone.<br><br>Tip: hold "shift" while clicking the trash icon to skip this confirmation.')) {
-        deleteConversation(conv.id);
-        showHistoryDialog();
+        await deleteConversation(conv.id);
+        await showHistoryDialog();
       }
     });
     actions.appendChild(trashBtn);
 
     li.appendChild(actions);
 
-    li.addEventListener('click', () => {
+    li.addEventListener('click', async () => {
       historyDialog.close();
-      restoreConversation(conv.id);
+      await restoreConversation(conv.id);
     });
 
     historyList.appendChild(li);
@@ -910,7 +996,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
       currentConversation.history = anthropicHistory;
       currentConversation.container = anthropicContainer;
     }
-    saveCurrentConversation();
+    await saveCurrentConversation(turnEvents);
   } catch (err: any) {
     showError(state.ui.container, `Error: ${err.message}`);
   }
@@ -951,10 +1037,8 @@ function extractUserText(events: StreamEvent[]): string {
   return '';
 }
 
-function restoreConversation(id: string) {
-  const all = loadConversations();
-  const conv = all[id];
-  if (!conv) throw new Error(`conversation ${id} not found`);
+async function restoreConversation(id: string) {
+  const conv = await loadConversation(id);
 
   // Update currentConversation
   currentConversation.id = conv.id;
