@@ -14,6 +14,48 @@ const attachLink = document.getElementById('attach')!;
 const attachContainer = document.getElementById('attach-container')!;
 const unattachLink = document.getElementById('unattach')!;
 
+// --- Conversation history persistence ---
+
+type Conversation = {
+  id: string;
+  config: ChatConfig;
+  history: AnthropicHistory | OpenAIHistory;
+  container?: string;
+  turns: StreamEvent[][];
+  updatedAt: number;
+};
+
+function generateId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
+const HISTORY_KEY = 'chatbot-history';
+
+const currentConversation: Conversation = {
+  id: generateId(),
+  config: undefined as unknown as ChatConfig, // set on first turn
+  history: [],
+  turns: [],
+  updatedAt: 0,
+};
+
+function loadConversations(): Record<string, Conversation> {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) as Record<string, Conversation> : {};
+  } catch { return {}; }
+}
+
+function saveCurrentConversation() {
+  currentConversation.updatedAt = Date.now();
+  const all = loadConversations();
+  all[currentConversation.id] = currentConversation;
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+}
+
 // --- Per-provider conversation history ---
 let anthropicHistory: AnthropicHistory = [];
 let anthropicContainer: string | undefined;
@@ -409,6 +451,7 @@ async function sendMessage() {
 
 async function streamChat(request: ChatRequest, files: File[]) {
   const ui = createStreamingUI();
+  const turnEvents: StreamEvent[] = [];
 
   const formData = new FormData();
   formData.append('messages', JSON.stringify(request.messages));
@@ -444,6 +487,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
         const line = part.trim();
         if (!line.startsWith('data: ')) continue;
         const event: StreamEvent = JSON.parse(line.slice(6));
+        turnEvents.push(event);
 
         switch (event.type) {
           case 'anthropic': {
@@ -613,6 +657,17 @@ async function streamChat(request: ChatRequest, files: File[]) {
         }
       }
     }
+    // Persist completed turn
+    currentConversation.turns.push(turnEvents);
+    currentConversation.config = request.config;
+    const model = request.config.model;
+    if (model === 'gpt-5.2') {
+      currentConversation.history = openaiHistory;
+    } else {
+      currentConversation.history = anthropicHistory;
+      currentConversation.container = anthropicContainer;
+    }
+    saveCurrentConversation();
   } catch (err: any) {
     showError(ui.container, `Error: ${err.message}`);
   }
