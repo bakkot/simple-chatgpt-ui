@@ -22,6 +22,8 @@ Never, ever use `as any`. If you absolutely must you can cast `as unknown as Wha
 
 When a type error arises, prefer fixing the types to reflect reality rather than casting to silence the compiler. For example, if a variable can hold values from two different APIs, widen the type to a union instead of asserting at the point of assignment.
 
+When branching over a string union (model names, provider names, etc.), every branch must explicitly check its value — never use a bare `else` or `default` as an implicit fallback for a known value. The final `else`/`default` must always be an unreachable error guard using `x satisfies never` + `throw new Error(...)`. This ensures TypeScript flags every branch point when a new variant is added.
+
 ## Type checking
 
 ```

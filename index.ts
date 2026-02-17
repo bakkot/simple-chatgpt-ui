@@ -406,7 +406,8 @@ function renderModelConfig() {
       `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
   } else {
-    modelConfigDiv.innerHTML = '';
+    model satisfies never;
+    throw new Error(`unknown model ${model}`);
   }
   persistState();
 }
@@ -1245,6 +1246,9 @@ async function streamChat(request: ChatRequest, files: File[]) {
           } else if (event.provider === 'google') {
             googleHistory.push(event.userContent);
             googleHistory.push(event.assistantContent);
+          } else {
+            event satisfies never;
+            throw new Error(`unknown provider ${(event as { provider: string }).provider}`);
           }
         }
       }
@@ -1261,9 +1265,12 @@ async function streamChat(request: ChatRequest, files: File[]) {
         currentConversation.container = openaiContainer;
       } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
         currentConversation.history = googleHistory;
-      } else {
+      } else if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
         currentConversation.history = anthropicHistory;
         currentConversation.container = anthropicContainer;
+      } else {
+        model satisfies never;
+        throw new Error(`unknown model ${model}`);
       }
       await saveCurrentConversation(turnEvents);
     }
@@ -1302,6 +1309,9 @@ function extractUserText(events: StreamEvent[]): string {
           if (part.text) return part.text;
         }
       }
+    } else {
+      event satisfies never;
+      throw new Error(`unknown provider ${(event as { provider: string }).provider}`);
     }
   }
   return '';
@@ -1334,12 +1344,15 @@ async function restoreConversation(id: string) {
     anthropicContainer = undefined;
     openaiHistory = [];
     openaiContainer = undefined;
-  } else {
+  } else if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];
     openaiContainer = undefined;
     googleHistory = [];
+  } else {
+    model satisfies never;
+    throw new Error(`unknown model ${model}`);
   }
 
   // Set model radio and config — but don't persist to localStorage yet.

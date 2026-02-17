@@ -492,8 +492,11 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       } else if (doneEvent.provider === 'openai') {
         log.assistantMessage = doneEvent.assistantMessage;
         log.container = doneEvent.container;
-      } else {
+      } else if (doneEvent.provider === 'google') {
         log.assistantMessage = doneEvent.assistantContent;
+      } else {
+        doneEvent satisfies never;
+        throw new Error(`unknown provider ${(doneEvent as { provider: string }).provider}`);
       }
     }
     fs.writeFileSync(path.join(dir, `${timestamp}.json`), JSON.stringify(log));
