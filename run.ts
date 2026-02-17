@@ -403,7 +403,7 @@ app.post('/check-user', (req, res) => {
   }
 });
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024, fieldSize: 50 * 1024 * 1024 } });
 
 app.post('/chat', upload.array('files'), async (req, res) => {
   const chat: ChatRequest = {
