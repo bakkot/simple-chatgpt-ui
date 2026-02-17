@@ -827,6 +827,14 @@ async function showHistoryDialog() {
   });
 
   historyList.innerHTML = '';
+  if (convs.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'history-item';
+    empty.style.color = '#999';
+    empty.style.justifyContent = 'center';
+    empty.textContent = '(empty)';
+    historyList.appendChild(empty);
+  }
   for (const conv of convs) {
     const preview = conv.preview;
     const li = document.createElement('li');
