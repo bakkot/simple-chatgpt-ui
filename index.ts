@@ -227,8 +227,8 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
-  'gemini-3-flash-preview': { google_search: false },
-  'gemini-3-pro-preview': { image_generation: false, google_search: false },
+  'gemini-3-flash-preview': { google_search: false, code_execution: false },
+  'gemini-3-pro-preview': { image_generation: false, google_search: false, code_execution: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -283,6 +283,8 @@ function saveModelConfig() {
   if (currentModel === 'gemini-3-flash-preview' || currentModel === 'gemini-3-pro-preview') {
     const gs = document.getElementById('config-google-search') as HTMLInputElement | null;
     if (gs) configState[currentModel].google_search = gs.checked;
+    const ce = document.getElementById('config-code-execution') as HTMLInputElement | null;
+    if (ce) configState[currentModel].code_execution = ce.checked;
   }
   persistState();
 }
@@ -307,11 +309,13 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
-      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>`;
+      `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
+      `<label><input type="checkbox" id="config-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
   } else if (model === 'gemini-3-flash-preview') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
-      `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>`;
+      `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
+      `<label><input type="checkbox" id="config-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -380,6 +384,7 @@ type TurnRenderState = {
   serverToolId: string;
   serverToolElements: Map<string, HTMLDetailsElement>;
   openaiCodePres: Map<string, HTMLPreElement>;
+  googleCodeDetails: HTMLDetailsElement | undefined;
 };
 
 function createStreamingUI(): StreamingUI {
@@ -408,6 +413,7 @@ function createTurnRenderState(): TurnRenderState {
     serverToolId: '',
     serverToolElements: new Map(),
     openaiCodePres: new Map(),
+    googleCodeDetails: undefined,
   };
 }
 
@@ -788,6 +794,18 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
         } else if (part.inlineData?.data && part.inlineData.mimeType) {
           clearPlaceholder(ui);
           renderBase64Image(ui.container, part.inlineData.mimeType, part.inlineData.data);
+          scrollToBottom();
+        } else if (part.executableCode?.code) {
+          const firstLine = part.executableCode.code.split('\n')[0];
+          const details = startServerTool(ui, firstLine, part.executableCode.code);
+          state.googleCodeDetails = details;
+        } else if (part.codeExecutionResult) {
+          const output = part.codeExecutionResult.output ?? '(no output)';
+          const target = state.googleCodeDetails ?? ui.container;
+          const pre = document.createElement('pre');
+          pre.textContent = output;
+          target.appendChild(pre);
+          state.googleCodeDetails = undefined;
           scrollToBottom();
         }
       }
