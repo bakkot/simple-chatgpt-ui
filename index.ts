@@ -434,10 +434,21 @@ function clearPlaceholder(ui: StreamingUI) {
 function appendText(ui: StreamingUI, text: string) {
   clearPlaceholder(ui);
   if (!ui.textSpan) {
-    ui.textSpan = document.createElement('span');
-    ui.container.appendChild(ui.textSpan);
+    // Reuse trailing span left by processCodeBlocks so text keeps accumulating in one span
+    const lastChild = ui.container.lastElementChild;
+    if (lastChild instanceof HTMLSpanElement) {
+      ui.textSpan = lastChild;
+    } else {
+      ui.textSpan = document.createElement('span');
+      ui.container.appendChild(ui.textSpan);
+    }
   }
   ui.textSpan.textContent += text;
+  // Process complete code blocks immediately
+  if (/```\w*\n[\s\S]*?\n```/.test(ui.textSpan.textContent ?? '')) {
+    processCodeBlocks(ui.container);
+    ui.textSpan = null;
+  }
   scrollToBottom();
 }
 
