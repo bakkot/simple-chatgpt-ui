@@ -38,7 +38,7 @@ function getChatRequest(text: string): ChatRequest {
         text,
       } as ChatRequest;
     }
-    case 'gpt-5-2': {
+    case 'gpt-5.2': {
       return {
         messages: openaiHistory,
         config: { model, ...configState[model] },
@@ -56,7 +56,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5-2': { web_search: false },
+  'gpt-5.2': { web_search: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -94,7 +94,7 @@ function saveModelConfig() {
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
   }
-  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5-2') {
+  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5.2') {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
@@ -111,7 +111,7 @@ function renderModelConfig() {
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
-  } else if (model === 'gpt-5-2') {
+  } else if (model === 'gpt-5.2') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>`;
@@ -520,6 +520,11 @@ async function streamChat(request: ChatRequest, files: File[]) {
                 serverToolJson = '';
                 serverToolName = '';
               }
+            } else if (raw.type !== 'message_start' && raw.type !== 'message_delta' && raw.type !== 'message_stop') {
+              // This branch is unreachable (raw is `never` here) but serves as
+              // a runtime safety net in case the SDK adds new event types
+              raw satisfies never;
+              console.warn('unhandled anthropic event type:', (raw as { type: string }).type, raw);
             }
             break;
           }
@@ -534,7 +539,33 @@ async function streamChat(request: ChatRequest, files: File[]) {
               const ann = raw.annotation as { type: string; url: string; title: string };
               if (ann.type === 'url_citation') {
                 appendCitation(ui, { url: ann.url, title: ann.title, cited_text: '' });
+              } else {
+                console.warn('unhandled openai annotation type:', ann.type, ann);
               }
+            } else if (raw.type === 'response.output_item.done') {
+              const item = raw.item;
+              if (item.type === 'web_search_call' && item.action.type === 'search') {
+                const query = item.action.queries?.join(', ') ?? item.action.query;
+                startSearch(ui, query);
+              }
+            } else if (
+              raw.type !== 'response.created' &&
+              raw.type !== 'response.in_progress' &&
+              raw.type !== 'response.completed' &&
+              raw.type !== 'response.output_item.added' &&
+              raw.type !== 'response.content_part.added' &&
+              raw.type !== 'response.content_part.done' &&
+              raw.type !== 'response.output_text.done' &&
+              raw.type !== 'response.reasoning_text.done' &&
+              raw.type !== 'response.reasoning_summary_text.delta' &&
+              raw.type !== 'response.reasoning_summary_text.done' &&
+              raw.type !== 'response.reasoning_summary_part.added' &&
+              raw.type !== 'response.reasoning_summary_part.done' &&
+              raw.type !== 'response.web_search_call.in_progress' &&
+              raw.type !== 'response.web_search_call.searching' &&
+              raw.type !== 'response.web_search_call.completed'
+            ) {
+              console.warn('unhandled openai event type:', raw.type, raw);
             }
             break;
           }

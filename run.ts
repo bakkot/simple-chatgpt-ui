@@ -66,7 +66,7 @@ export type Opus46Config = {
 };
 
 export type GPT52Config = {
-  model: 'gpt-5-2';
+  model: 'gpt-5.2';
   web_search?: boolean;
 };
 
@@ -251,7 +251,6 @@ async function streamOpenAIChat(
     }
 
     const assistantMessage = await stream.finalResponse();
-    console.dir({ assistantMessage }, { depth: Infinity });
     send({ type: 'done', provider: 'openai', userInput, assistantMessage });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });
@@ -317,7 +316,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gpt-5-2': {
+    case 'gpt-5.2': {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
