@@ -222,6 +222,14 @@ type StreamingUI = {
   citationCount: number;
 };
 
+type TurnRenderState = {
+  ui: StreamingUI;
+  serverToolJson: string;
+  serverToolName: string;
+  serverToolId: string;
+  serverToolElements: Map<string, HTMLDetailsElement>;
+};
+
 function createStreamingUI(): StreamingUI {
   const container = addMessageDiv(true);
   const placeholder = document.createElement('span');
@@ -237,6 +245,16 @@ function createStreamingUI(): StreamingUI {
     searchDetails: null,
     searchContent: null,
     citationCount: 0,
+  };
+}
+
+function createTurnRenderState(): TurnRenderState {
+  return {
+    ui: createStreamingUI(),
+    serverToolJson: '',
+    serverToolName: '',
+    serverToolId: '',
+    serverToolElements: new Map(),
   };
 }
 
@@ -391,6 +409,167 @@ function renderBase64Image(container: HTMLElement, mediaType: string, data: stri
   renderImage(container, `data:${mediaType};base64,${data}`);
 }
 
+// --- Event rendering (shared between streaming and replay) ---
+
+function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
+  const { ui } = state;
+  switch (event.type) {
+    case 'anthropic': {
+      const raw = event.event;
+      if (raw.type === 'content_block_delta') {
+        const delta = raw.delta;
+        if (delta.type === 'text_delta') {
+          appendText(ui, delta.text);
+        } else if (delta.type === 'thinking_delta') {
+          appendThinking(ui, delta.thinking);
+        } else if (delta.type === 'citations_delta') {
+          const c = delta.citation;
+          if ('url' in c) {
+            appendCitation(ui, c);
+          }
+        } else if (delta.type === 'input_json_delta') {
+          state.serverToolJson += delta.partial_json;
+        } else if (delta.type !== 'signature_delta') {
+          console.warn('unhandled content_block_delta type:', delta.type, delta);
+        }
+      } else if (raw.type === 'content_block_start') {
+        const blockType = raw.content_block?.type;
+        if (blockType === 'text') {
+          ui.textSpan = null;
+        } else if (blockType === 'server_tool_use') {
+          state.serverToolJson = '';
+          state.serverToolName = raw.content_block.name;
+          state.serverToolId = raw.content_block.id;
+        } else if (blockType === 'web_search_tool_result') {
+          const content = raw.content_block.content;
+          if (Array.isArray(content)) {
+            addSearchResults(ui, content);
+          }
+        } else if (blockType === 'code_execution_tool_result' || blockType === 'bash_code_execution_tool_result') {
+          const { content, tool_use_id } = raw.content_block;
+          if ('stdout' in content) {
+            const pairedDetails = state.serverToolElements.get(tool_use_id);
+            if (pairedDetails) {
+              addExecutionResult(pairedDetails, content);
+              state.serverToolElements.delete(tool_use_id);
+            } else {
+              const details = startServerTool(ui, 'Execution result', '');
+              addExecutionResult(details, content);
+            }
+          }
+        } else if (blockType === 'text_editor_code_execution_tool_result') {
+          // Text editor results are structural (create/view/str_replace) — no stdout to show
+        } else if (blockType !== 'thinking' && blockType !== 'redacted_thinking') {
+          console.warn('unhandled content_block_start type:', blockType, raw.content_block);
+        }
+      } else if (raw.type === 'content_block_stop') {
+        if (state.serverToolJson) {
+          try {
+            const parsed = JSON.parse(state.serverToolJson);
+            let details: HTMLDetailsElement | undefined;
+            switch (state.serverToolName) {
+              case 'web_search':
+                startSearch(ui, parsed.query);
+                break;
+              case 'code_execution':
+                details = startServerTool(ui, parsed.code.split('\n')[0], parsed.code);
+                break;
+              case 'bash_code_execution':
+                details = startServerTool(ui, `$ ${parsed.command}`, '');
+                break;
+              case 'text_editor_code_execution':
+                details = startServerTool(ui, `${parsed.command} ${parsed.path}`, parsed.file_text ?? parsed.new_str ?? '');
+                break;
+              default:
+                console.warn('unhandled server tool:', state.serverToolName, parsed);
+                details = startServerTool(ui, state.serverToolName, JSON.stringify(parsed, null, 2));
+                break;
+            }
+            if (details) {
+              state.serverToolElements.set(state.serverToolId, details);
+            }
+          } catch {}
+          state.serverToolJson = '';
+          state.serverToolName = '';
+        }
+      } else if (raw.type !== 'message_start' && raw.type !== 'message_delta' && raw.type !== 'message_stop') {
+        raw satisfies never;
+        console.warn('unhandled anthropic event type:', (raw as { type: string }).type, raw);
+      }
+      break;
+    }
+
+    case 'openai': {
+      const raw = event.event;
+      if (raw.type === 'response.output_text.delta') {
+        appendText(ui, raw.delta);
+      } else if (raw.type === 'response.reasoning_text.delta') {
+        appendThinking(ui, raw.delta);
+      } else if (raw.type === 'response.output_text.annotation.added') {
+        const ann = raw.annotation as { type: string; url: string; title: string };
+        if (ann.type === 'url_citation') {
+          appendCitation(ui, { url: ann.url, title: ann.title, cited_text: '' });
+        } else {
+          console.warn('unhandled openai annotation type:', ann.type, ann);
+        }
+      } else if (raw.type === 'response.output_item.done') {
+        const item = raw.item;
+        if (item.type === 'web_search_call' && item.action.type === 'search') {
+          const query = item.action.queries?.join(', ') ?? item.action.query;
+          startSearch(ui, query);
+        }
+      } else if (
+        raw.type !== 'response.created' &&
+        raw.type !== 'response.in_progress' &&
+        raw.type !== 'response.completed' &&
+        raw.type !== 'response.output_item.added' &&
+        raw.type !== 'response.content_part.added' &&
+        raw.type !== 'response.content_part.done' &&
+        raw.type !== 'response.output_text.done' &&
+        raw.type !== 'response.reasoning_text.done' &&
+        raw.type !== 'response.reasoning_summary_text.delta' &&
+        raw.type !== 'response.reasoning_summary_text.done' &&
+        raw.type !== 'response.reasoning_summary_part.added' &&
+        raw.type !== 'response.reasoning_summary_part.done' &&
+        raw.type !== 'response.web_search_call.in_progress' &&
+        raw.type !== 'response.web_search_call.searching' &&
+        raw.type !== 'response.web_search_call.completed' &&
+        raw.type !== 'response.image_generation_call.in_progress' &&
+        raw.type !== 'response.image_generation_call.generating' &&
+        raw.type !== 'response.image_generation_call.partial_image' &&
+        raw.type !== 'response.image_generation_call.completed'
+      ) {
+        console.warn('unhandled openai event type:', raw.type, raw);
+      }
+      break;
+    }
+
+    case 'done': {
+      // Render OpenAI generated images (history mutation is handled by the caller)
+      if (event.provider === 'openai') {
+        for (const item of event.assistantMessage.output) {
+          if ('type' in item && item.type === 'image_generation_call' && 'result' in item && item.result) {
+            clearPlaceholder(ui);
+            renderBase64Image(ui.container, 'image/png', item.result);
+          }
+        }
+      }
+      break;
+    }
+
+    case 'error': {
+      showError(ui.container, `Error: ${event.error}`);
+      break;
+    }
+
+    default: {
+      event satisfies never;
+      showError(ui.container, `Error: got bad message type ${(event as { type: string }).type}`);
+      break;
+    }
+  }
+}
+
 // --- UI helpers ---
 
 function scrollToBottom() {
@@ -450,7 +629,7 @@ async function sendMessage() {
 // --- Stream ---
 
 async function streamChat(request: ChatRequest, files: File[]) {
-  const ui = createStreamingUI();
+  const state = createTurnRenderState();
   const turnEvents: StreamEvent[] = [];
 
   const formData = new FormData();
@@ -470,10 +649,6 @@ async function streamChat(request: ChatRequest, files: File[]) {
     const reader = resp.body!.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let serverToolJson = '';
-    let serverToolName = '';
-    let serverToolId = '';
-    const serverToolElements = new Map<string, HTMLDetailsElement>();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -489,170 +664,21 @@ async function streamChat(request: ChatRequest, files: File[]) {
         const event: StreamEvent = JSON.parse(line.slice(6));
         turnEvents.push(event);
 
-        switch (event.type) {
-          case 'anthropic': {
-            const raw = event.event;
-            if (raw.type === 'content_block_delta') {
-              const delta = raw.delta;
-              if (delta.type === 'text_delta') {
-                appendText(ui, delta.text);
-              } else if (delta.type === 'thinking_delta') {
-                appendThinking(ui, delta.thinking);
-              } else if (delta.type === 'citations_delta') {
-                const c = delta.citation;
-                if ('url' in c) {
-                  appendCitation(ui, c);
-                }
-              } else if (delta.type === 'input_json_delta') {
-                serverToolJson += delta.partial_json;
-              } else if (delta.type !== 'signature_delta') {
-                console.warn('unhandled content_block_delta type:', delta.type, delta);
-              }
-            } else if (raw.type === 'content_block_start') {
-              const blockType = raw.content_block?.type;
-              if (blockType === 'text') {
-                ui.textSpan = null;
-              } else if (blockType === 'server_tool_use') {
-                serverToolJson = '';
-                serverToolName = raw.content_block.name;
-                serverToolId = raw.content_block.id;
-              } else if (blockType === 'web_search_tool_result') {
-                const content = raw.content_block.content;
-                if (Array.isArray(content)) {
-                  addSearchResults(ui, content);
-                }
-              } else if (blockType === 'code_execution_tool_result' || blockType === 'bash_code_execution_tool_result') {
-                const { content, tool_use_id } = raw.content_block;
-                if ('stdout' in content) {
-                  const pairedDetails = serverToolElements.get(tool_use_id);
-                  if (pairedDetails) {
-                    addExecutionResult(pairedDetails, content);
-                    serverToolElements.delete(tool_use_id);
-                  } else {
-                    // Fallback: result arrived without a matching invocation
-                    const details = startServerTool(ui, 'Execution result', '');
-                    addExecutionResult(details, content);
-                  }
-                }
-              } else if (blockType === 'text_editor_code_execution_tool_result') {
-                // Text editor results are structural (create/view/str_replace) — no stdout to show
-              } else if (blockType !== 'thinking' && blockType !== 'redacted_thinking') {
-                console.warn('unhandled content_block_start type:', blockType, raw.content_block);
-              }
-            } else if (raw.type === 'content_block_stop') {
-              if (serverToolJson) {
-                try {
-                  const parsed = JSON.parse(serverToolJson);
-                  let details: HTMLDetailsElement | undefined;
-                  switch (serverToolName) {
-                    case 'web_search':
-                      startSearch(ui, parsed.query);
-                      break;
-                    case 'code_execution':
-                      details = startServerTool(ui, parsed.code.split('\n')[0], parsed.code);
-                      break;
-                    case 'bash_code_execution':
-                      details = startServerTool(ui, `$ ${parsed.command}`, '');
-                      break;
-                    case 'text_editor_code_execution':
-                      details = startServerTool(ui, `${parsed.command} ${parsed.path}`, parsed.file_text ?? parsed.new_str ?? '');
-                      break;
-                    default:
-                      console.warn('unhandled server tool:', serverToolName, parsed);
-                      details = startServerTool(ui, serverToolName, JSON.stringify(parsed, null, 2));
-                      break;
-                  }
-                  if (details) {
-                    serverToolElements.set(serverToolId, details);
-                  }
-                } catch {}
-                serverToolJson = '';
-                serverToolName = '';
-              }
-            } else if (raw.type !== 'message_start' && raw.type !== 'message_delta' && raw.type !== 'message_stop') {
-              // This branch is unreachable (raw is `never` here) but serves as
-              // a runtime safety net in case the SDK adds new event types
-              raw satisfies never;
-              console.warn('unhandled anthropic event type:', (raw as { type: string }).type, raw);
+        renderStreamEvent(state, event);
+
+        // Update conversation history from done event
+        if (event.type === 'done') {
+          if (event.provider === 'anthropic') {
+            anthropicHistory.push(event.userMessage);
+            anthropicHistory.push({ role: 'assistant', content: event.assistantMessage.content });
+            if (event.container) {
+              anthropicContainer = event.container;
             }
-            break;
-          }
-
-          case 'openai': {
-            const raw = event.event;
-            if (raw.type === 'response.output_text.delta') {
-              appendText(ui, raw.delta);
-            } else if (raw.type === 'response.reasoning_text.delta') {
-              appendThinking(ui, raw.delta);
-            } else if (raw.type === 'response.output_text.annotation.added') {
-              const ann = raw.annotation as { type: string; url: string; title: string };
-              if (ann.type === 'url_citation') {
-                appendCitation(ui, { url: ann.url, title: ann.title, cited_text: '' });
-              } else {
-                console.warn('unhandled openai annotation type:', ann.type, ann);
-              }
-            } else if (raw.type === 'response.output_item.done') {
-              const item = raw.item;
-              if (item.type === 'web_search_call' && item.action.type === 'search') {
-                const query = item.action.queries?.join(', ') ?? item.action.query;
-                startSearch(ui, query);
-              }
-            } else if (
-              raw.type !== 'response.created' &&
-              raw.type !== 'response.in_progress' &&
-              raw.type !== 'response.completed' &&
-              raw.type !== 'response.output_item.added' &&
-              raw.type !== 'response.content_part.added' &&
-              raw.type !== 'response.content_part.done' &&
-              raw.type !== 'response.output_text.done' &&
-              raw.type !== 'response.reasoning_text.done' &&
-              raw.type !== 'response.reasoning_summary_text.delta' &&
-              raw.type !== 'response.reasoning_summary_text.done' &&
-              raw.type !== 'response.reasoning_summary_part.added' &&
-              raw.type !== 'response.reasoning_summary_part.done' &&
-              raw.type !== 'response.web_search_call.in_progress' &&
-              raw.type !== 'response.web_search_call.searching' &&
-              raw.type !== 'response.web_search_call.completed' &&
-              raw.type !== 'response.image_generation_call.in_progress' &&
-              raw.type !== 'response.image_generation_call.generating' &&
-              raw.type !== 'response.image_generation_call.partial_image' &&
-              raw.type !== 'response.image_generation_call.completed'
-            ) {
-              console.warn('unhandled openai event type:', raw.type, raw);
+          } else {
+            openaiHistory.push(event.userInput);
+            for (const item of event.assistantMessage.output) {
+              openaiHistory.push(item);
             }
-            break;
-          }
-
-          case 'done': {
-            if (event.provider === 'anthropic') {
-              anthropicHistory.push(event.userMessage);
-              anthropicHistory.push({ role: 'assistant', content: event.assistantMessage.content });
-              if (event.container) {
-                anthropicContainer = event.container;
-              }
-            } else {
-              openaiHistory.push(event.userInput);
-              for (const item of event.assistantMessage.output) {
-                openaiHistory.push(item);
-                // Render generated images
-                if ('type' in item && item.type === 'image_generation_call' && 'result' in item && item.result) {
-                  clearPlaceholder(ui);
-                  renderBase64Image(ui.container, 'image/png', item.result);
-                }
-              }
-            }
-            break;
-          }
-
-          case 'error': {
-            showError(ui.container, `Error: ${event.error}`);
-            break;
-          }
-
-          default: {
-            event satisfies never; // assert switch exhaustiveness
-            showError(ui.container, `Error: got bad message type ${(event as { type: string }).type}`);
-            break;
           }
         }
       }
@@ -669,9 +695,92 @@ async function streamChat(request: ChatRequest, files: File[]) {
     }
     saveCurrentConversation();
   } catch (err: any) {
-    showError(ui.container, `Error: ${err.message}`);
+    showError(state.ui.container, `Error: ${err.message}`);
   }
 }
+
+// --- Restore conversation from history ---
+
+function extractUserText(events: StreamEvent[]): string {
+  for (const event of events) {
+    if (event.type !== 'done') continue;
+    if (event.provider === 'anthropic') {
+      const { content } = event.userMessage;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if ('text' in block && typeof block.text === 'string') return block.text;
+        }
+      }
+    } else {
+      if ('content' in event.userInput) {
+        const { content } = event.userInput;
+        if (typeof content === 'string') return content;
+        if (Array.isArray(content)) {
+          for (const part of content) {
+            if ('text' in part && typeof part.text === 'string') return part.text;
+          }
+        }
+      }
+    }
+  }
+  return '';
+}
+
+function restoreConversation(id: string) {
+  const all = loadConversations();
+  const conv = all[id];
+  if (!conv) throw new Error(`conversation ${id} not found`);
+
+  // Update currentConversation
+  currentConversation.id = conv.id;
+  currentConversation.config = conv.config;
+  currentConversation.history = conv.history;
+  currentConversation.container = conv.container;
+  currentConversation.turns = conv.turns;
+  currentConversation.updatedAt = conv.updatedAt;
+
+  // Set provider-specific globals
+  const model = conv.config.model;
+  if (model === 'gpt-5.2') {
+    openaiHistory = conv.history as OpenAIHistory;
+    anthropicHistory = [];
+    anthropicContainer = undefined;
+  } else {
+    anthropicHistory = conv.history as AnthropicHistory;
+    anthropicContainer = conv.container;
+    openaiHistory = [];
+  }
+
+  // Set model radio and config
+  const radio = document.querySelector<HTMLInputElement>(`input[name="model"][value="${model}"]`);
+  if (radio) radio.checked = true;
+  const { model: _, ...configFields } = conv.config;
+  Object.assign(configState[model], configFields);
+  renderModelConfig();
+  lockModelSelection();
+
+  // Clear and replay UI
+  messagesDiv.innerHTML = '';
+  for (const turnEvents of conv.turns) {
+    const userText = extractUserText(turnEvents);
+    if (userText) {
+      const userDiv = addMessageDiv(false);
+      const span = document.createElement('span');
+      span.textContent = userText;
+      userDiv.appendChild(span);
+    }
+
+    const state = createTurnRenderState();
+    for (const event of turnEvents) {
+      renderStreamEvent(state, event);
+    }
+  }
+  scrollToBottom();
+}
+
+// Expose for console testing
+Object.assign(window, { restoreConversation, loadConversations });
 
 sendBtn.addEventListener('click', sendMessage);
 textarea.addEventListener('keydown', (e) => {
