@@ -1114,6 +1114,7 @@ async function showHistoryDialog() {
     trashIcon.removeAttribute('style');
     trashIcon.removeAttribute('id');
     trashBtn.appendChild(trashIcon);
+    trashBtn.addEventListener('mousedown', (e) => { if (e.shiftKey) e.preventDefault(); });
     trashBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       if (e.shiftKey || await confirmAction('Delete this conversation? This cannot be undone.<br><br>Tip: hold "shift" while clicking the trash icon to skip this confirmation.')) {
