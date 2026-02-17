@@ -5,6 +5,8 @@ import express from 'express';
 import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
+import type { Content as GoogleContent, Part as GooglePart } from '@google/genai';
 
 const PORT = 21665; // 'gpt' in base 36
 
@@ -21,6 +23,7 @@ function readKeyOrEmpty(name: string) {
 
 const ANTHROPIC_API_KEY = readKeyOrEmpty('ANTHROPIC_KEY.txt');
 const OPENAI_API_KEY = readKeyOrEmpty('OPENAI_KEY.txt');
+const GOOGLE_API_KEY = readKeyOrEmpty('GOOGLE_KEY.txt');
 
 const ALLOWED_USERS = fs.readFileSync(path.join(import.meta.dirname, 'ALLOWED_USERS.txt'), 'utf8').split('\n').map(x => x.trim()).filter(x => x.length > 0);
 
@@ -30,6 +33,10 @@ const anthropic = new Anthropic({
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
+const google = new GoogleGenAI({
+  apiKey: GOOGLE_API_KEY,
+});
+
 
 // --- Anthropic types ---
 // History can contain both regular and beta message params, since assistant
@@ -38,6 +45,10 @@ export type AnthropicMessageParam = Anthropic.MessageParam | Anthropic.Beta.Beta
 export type AnthropicMessage = Anthropic.Message | Anthropic.Beta.BetaMessage;
 export type AnthropicStreamEvent = Anthropic.RawMessageStreamEvent | Anthropic.Beta.BetaRawMessageStreamEvent;
 export type AnthropicHistory = AnthropicMessageParam[];
+
+// --- Google types ---
+export type { GoogleContent, GooglePart };
+export type GoogleHistory = GoogleContent[];
 
 // --- OpenAI types ---
 export type OpenAIInputItem = OpenAI.Responses.ResponseInputItem;
@@ -73,22 +84,30 @@ export type GPT52Config = {
   container?: string;
 };
 
-export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config;
+export type Gemini3FlashConfig = {
+  model: 'gemini-3-flash-preview';
+};
+
+export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string }
-  | { messages: OpenAIHistory; config: GPT52Config; text: string };
+  | { messages: OpenAIHistory; config: GPT52Config; text: string }
+  | { messages: GoogleHistory; config: Gemini3FlashConfig; text: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
+export type GoogleStreamChunk = { text: string };
+export type GoogleEvent = { type: 'google'; event: GoogleStreamChunk };
 export type DoneEvent =
   | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage; container?: string }
-  | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse; container?: string };
+  | { type: 'done'; provider: 'openai'; userInput: OpenAIInputItem; assistantMessage: OpenAIResponse; container?: string }
+  | { type: 'done'; provider: 'google'; userContent: GoogleContent; assistantContent: GoogleContent };
 export type ErrorEvent = { type: 'error'; error: string };
-export type StreamEvent = AnthropicEvent | OpenAIEvent | DoneEvent | ErrorEvent;
+export type StreamEvent = AnthropicEvent | OpenAIEvent | GoogleEvent | DoneEvent | ErrorEvent;
 
 // --- Anthropic ---
 
@@ -277,6 +296,58 @@ async function streamOpenAIChat(
   }
 }
 
+// --- Google ---
+
+function buildGoogleUserContent(text: string, files: Express.Multer.File[]): GoogleContent {
+  const parts: GooglePart[] = [];
+  for (const file of files) {
+    const base64 = file.buffer.toString('base64');
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      parts.push({
+        inlineData: { mimeType: file.mimetype, data: base64 },
+      });
+    } else {
+      parts.push({ text: `[File: ${file.originalname}]\n${file.buffer.toString('utf8')}` });
+    }
+  }
+  if (text) {
+    parts.push({ text });
+  }
+  return { role: 'user', parts };
+}
+
+async function streamGoogleChat(
+  history: GoogleHistory,
+  text: string,
+  files: Express.Multer.File[],
+  config: Gemini3FlashConfig,
+  send: (event: StreamEvent) => void,
+): Promise<void> {
+  try {
+    const userContent = buildGoogleUserContent(text, files);
+    history.push(userContent);
+
+    const stream = await google.models.generateContentStream({
+      model: config.model,
+      contents: history,
+    });
+
+    let fullText = '';
+    for await (const chunk of stream) {
+      const chunkText = chunk.text;
+      if (chunkText) {
+        fullText += chunkText;
+        send({ type: 'google', event: { text: chunkText } });
+      }
+    }
+
+    const assistantContent: GoogleContent = { role: 'model', parts: [{ text: fullText }] };
+    send({ type: 'done', provider: 'google', userContent, assistantContent });
+  } catch (err: any) {
+    send({ type: 'error', error: err.message ?? String(err) });
+  }
+}
+
 // --- Express ---
 
 const app = express();
@@ -338,6 +409,10 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     }
     case 'gpt-5.2': {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
+      break;
+    }
+    case 'gemini-3-flash-preview': {
+      await streamGoogleChat(chat.messages as GoogleHistory, chat.text, files, chat.config, send);
       break;
     }
     default: {

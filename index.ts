@@ -1,7 +1,8 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  Sonnet45Config, Opus46Config, GPT52Config, ChatConfig, ChatRequest, StreamEvent,
+  GoogleContent, GoogleHistory,
+  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -27,7 +28,7 @@ const confirmDialogOk = document.getElementById('confirm-dialog-ok')!;
 type Conversation = {
   id: string;
   config: ChatConfig;
-  history: AnthropicHistory | OpenAIHistory;
+  history: AnthropicHistory | OpenAIHistory | GoogleHistory;
   container?: string;
   turns: StreamEvent[][];
   updatedAt: number;
@@ -85,6 +86,7 @@ let anthropicHistory: AnthropicHistory = [];
 let anthropicContainer: string | undefined;
 let openaiHistory: OpenAIHistory = [];
 let openaiContainer: string | undefined;
+let googleHistory: GoogleHistory = [];
 let hasSentMessage = false;
 let pendingFiles: File[] = [];
 
@@ -112,6 +114,13 @@ function getChatRequest(text: string): ChatRequest {
         text,
       };
     }
+    case 'gemini-3-flash-preview': {
+      return {
+        messages: googleHistory,
+        config: { model },
+        text,
+      };
+    }
     default: {
       model satisfies never; // assert switch exhaustiveness
       throw new Error(`unknown model ${model}`);
@@ -124,6 +133,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false },
+  'gemini-3-flash-preview': {},
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -621,6 +631,11 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
       break;
     }
 
+    case 'google': {
+      appendText(ui, event.event.text);
+      break;
+    }
+
     case 'done': {
       // Render OpenAI generated images (history mutation is handled by the caller)
       if (event.provider === 'openai') {
@@ -843,7 +858,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
             if (event.container) {
               anthropicContainer = event.container;
             }
-          } else {
+          } else if (event.provider === 'openai') {
             openaiHistory.push(event.userInput);
             for (const item of event.assistantMessage.output) {
               openaiHistory.push(item);
@@ -851,6 +866,9 @@ async function streamChat(request: ChatRequest, files: File[]) {
             if (event.container) {
               openaiContainer = event.container;
             }
+          } else if (event.provider === 'google') {
+            googleHistory.push(event.userContent);
+            googleHistory.push(event.assistantContent);
           }
         }
       }
@@ -862,6 +880,8 @@ async function streamChat(request: ChatRequest, files: File[]) {
     if (model === 'gpt-5.2') {
       currentConversation.history = openaiHistory;
       currentConversation.container = openaiContainer;
+    } else if (model === 'gemini-3-flash-preview') {
+      currentConversation.history = googleHistory;
     } else {
       currentConversation.history = anthropicHistory;
       currentConversation.container = anthropicContainer;
@@ -885,7 +905,7 @@ function extractUserText(events: StreamEvent[]): string {
           if ('text' in block && typeof block.text === 'string') return block.text;
         }
       }
-    } else {
+    } else if (event.provider === 'openai') {
       if ('content' in event.userInput) {
         const { content } = event.userInput;
         if (typeof content === 'string') return content;
@@ -893,6 +913,13 @@ function extractUserText(events: StreamEvent[]): string {
           for (const part of content) {
             if ('text' in part && typeof part.text === 'string') return part.text;
           }
+        }
+      }
+    } else if (event.provider === 'google') {
+      const parts = event.userContent.parts;
+      if (parts) {
+        for (const part of parts) {
+          if (part.text) return part.text;
         }
       }
     }
@@ -920,11 +947,19 @@ function restoreConversation(id: string) {
     openaiContainer = conv.container;
     anthropicHistory = [];
     anthropicContainer = undefined;
+    googleHistory = [];
+  } else if (model === 'gemini-3-flash-preview') {
+    googleHistory = conv.history as GoogleHistory;
+    anthropicHistory = [];
+    anthropicContainer = undefined;
+    openaiHistory = [];
+    openaiContainer = undefined;
   } else {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];
     openaiContainer = undefined;
+    googleHistory = [];
   }
 
   // Set model radio and config
