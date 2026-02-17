@@ -1,7 +1,7 @@
 import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  Sonnet45Config, Opus46Config, GPT5Config, ChatConfig, ChatRequest, StreamEvent,
+  Sonnet45Config, Opus46Config, GPT52Config, ChatConfig, ChatRequest, StreamEvent,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -38,7 +38,7 @@ function getChatRequest(text: string): ChatRequest {
         text,
       } as ChatRequest;
     }
-    case 'gpt-5': {
+    case 'gpt-5-2': {
       return {
         messages: openaiHistory,
         config: { model, ...configState[model] },
@@ -56,7 +56,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5': {},
+  'gpt-5-2': { web_search: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -91,10 +91,12 @@ function saveModelConfig() {
   if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
-    const ws = document.getElementById('anthropic-web-search') as HTMLInputElement | null;
-    if (ws) configState[currentModel].web_search = ws.checked;
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
+  }
+  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5-2') {
+    const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
+    if (ws) configState[currentModel].web_search = ws.checked;
   }
   persistState();
 }
@@ -107,8 +109,12 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
-      `<label><input type="checkbox" id="anthropic-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
+      `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
+  } else if (model === 'gpt-5-2') {
+    const config = configState[model];
+    modelConfigDiv.innerHTML =
+      `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>`;
   } else {
     modelConfigDiv.innerHTML = '';
   }
@@ -524,6 +530,11 @@ async function streamChat(request: ChatRequest, files: File[]) {
               appendText(ui, raw.delta);
             } else if (raw.type === 'response.reasoning_text.delta') {
               appendThinking(ui, raw.delta);
+            } else if (raw.type === 'response.output_text.annotation.added') {
+              const ann = raw.annotation as { type: string; url: string; title: string };
+              if (ann.type === 'url_citation') {
+                appendCitation(ui, { url: ann.url, title: ann.title, cited_text: '' });
+              }
             }
             break;
           }

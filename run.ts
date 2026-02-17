@@ -65,17 +65,18 @@ export type Opus46Config = {
   container?: string;
 };
 
-export type GPT5Config = {
-  model: 'gpt-5';
+export type GPT52Config = {
+  model: 'gpt-5-2';
+  web_search?: boolean;
 };
 
-export type ChatConfig = Sonnet45Config | Opus46Config | GPT5Config;
+export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string }
-  | { messages: OpenAIHistory; config: GPT5Config; text: string };
+  | { messages: OpenAIHistory; config: GPT52Config; text: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -227,16 +228,22 @@ async function streamOpenAIChat(
   input: OpenAIHistory,
   text: string,
   files: Express.Multer.File[],
-  config: GPT5Config,
+  config: GPT52Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
     const userInput = buildOpenAIUserInput(text, files);
     input.push(userInput);
 
+    const tools: OpenAI.Responses.Tool[] = [];
+    if (config.web_search) {
+      tools.push({ type: 'web_search' });
+    }
+
     const stream = await openai.responses.stream({
       model: config.model,
       input,
+      tools: tools.length > 0 ? tools : undefined,
     });
 
     for await (const event of stream) {
@@ -310,7 +317,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gpt-5': {
+    case 'gpt-5-2': {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
