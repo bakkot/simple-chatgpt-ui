@@ -100,7 +100,7 @@ export type ChatRequest =
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
 export type OpenAIEvent = { type: 'openai'; event: OpenAI.Responses.ResponseStreamEvent };
-export type GoogleStreamChunk = { text: string };
+export type GoogleStreamChunk = { parts: GooglePart[] };
 export type GoogleEvent = { type: 'google'; event: GoogleStreamChunk };
 export type DoneEvent =
   | { type: 'done'; provider: 'anthropic'; userMessage: AnthropicMessageParam; assistantMessage: AnthropicMessage; container?: string }
@@ -332,16 +332,24 @@ async function streamGoogleChat(
       contents: history,
     });
 
-    let fullText = '';
+    const allParts: GooglePart[] = [];
     for await (const chunk of stream) {
-      const chunkText = chunk.text;
-      if (chunkText) {
-        fullText += chunkText;
-        send({ type: 'google', event: { text: chunkText } });
+      const parts = chunk.candidates?.[0]?.content?.parts;
+      if (parts && parts.length > 0) {
+        send({ type: 'google', event: { parts } });
+        for (const part of parts) {
+          // Merge consecutive text parts into one
+          const last = allParts[allParts.length - 1];
+          if (part.text != null && last?.text != null) {
+            last.text += part.text;
+          } else {
+            allParts.push({ ...part });
+          }
+        }
       }
     }
 
-    const assistantContent: GoogleContent = { role: 'model', parts: [{ text: fullText }] };
+    const assistantContent: GoogleContent = { role: 'model', parts: allParts };
     send({ type: 'done', provider: 'google', userContent, assistantContent });
   } catch (err: any) {
     send({ type: 'error', error: err.message ?? String(err) });

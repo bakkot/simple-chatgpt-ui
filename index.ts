@@ -632,7 +632,11 @@ function renderStreamEvent(state: TurnRenderState, event: StreamEvent) {
     }
 
     case 'google': {
-      appendText(ui, event.event.text);
+      for (const part of event.event.parts) {
+        if (part.text != null) {
+          appendText(ui, part.text);
+        }
+      }
       break;
     }
 
