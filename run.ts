@@ -482,6 +482,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     fs.mkdirSync(dir, { recursive: true });
     const log: Record<string, unknown> = {
       config: chat.config,
+      history: chat.messages,
       userMessage: chat.text,
       events: allEvents,
     };
