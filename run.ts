@@ -105,10 +105,10 @@ export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3Fl
 
 // --- Request type ---
 export type ChatRequest =
-  | { messages: AnthropicHistory; config: Sonnet45Config; text: string }
-  | { messages: AnthropicHistory; config: Opus46Config; text: string }
-  | { messages: OpenAIHistory; config: GPT52Config; text: string }
-  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini3ProConfig; text: string };
+  | { messages: AnthropicHistory; config: Sonnet45Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
+  | { messages: OpenAIHistory; config: GPT52Config; text: string, id: string }
+  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini3ProConfig; text: string, id: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -436,6 +436,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     messages: JSON.parse(req.body.messages),
     config: JSON.parse(req.body.config),
     text: req.body.text || '',
+    id: req.body.id,
   };
   const files = (req.files as Express.Multer.File[]) || [];
 
@@ -485,6 +486,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       history: chat.messages,
       userMessage: chat.text,
       events: allEvents,
+      id: chat.id,
     };
     if (doneEvent) {
       if (doneEvent.provider === 'anthropic') {

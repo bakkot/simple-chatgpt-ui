@@ -271,6 +271,7 @@ function getChatRequest(text: string): ChatRequest {
         messages: anthropicHistory,
         config: { model, ...configState[model], container: anthropicContainer },
         text,
+        id: currentConversation.id,
       } as ChatRequest;
     }
     case 'gpt-5.2': {
@@ -278,6 +279,7 @@ function getChatRequest(text: string): ChatRequest {
         messages: openaiHistory,
         config: { model, ...configState[model], container: openaiContainer },
         text,
+        id: currentConversation.id,
       };
     }
     case 'gemini-3-flash-preview': {
@@ -285,6 +287,7 @@ function getChatRequest(text: string): ChatRequest {
         messages: googleHistory,
         config: { model },
         text,
+        id: currentConversation.id,
       };
     }
     case 'gemini-3-pro-preview': {
@@ -292,6 +295,7 @@ function getChatRequest(text: string): ChatRequest {
         messages: googleHistory,
         config: { model, ...configState[model] },
         text,
+        id: currentConversation.id,
       };
     }
     default: {
