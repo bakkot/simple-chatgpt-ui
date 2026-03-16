@@ -2,7 +2,7 @@ import type {
   AnthropicHistory, AnthropicMessageParam,
   OpenAIHistory, OpenAIInputItem, OpenAIResponse,
   GoogleContent, GoogleHistory, GroundingMetadata,
-  Sonnet45Config, Opus46Config, GPT52Config, Gemini3FlashConfig, Gemini3ProConfig, ChatConfig, ChatRequest, StreamEvent, ReasoningEffort,
+  Sonnet46Config, Opus46Config, GPT54Config, Gemini3FlashConfig, Gemini31ProConfig, ChatConfig, ChatRequest, StreamEvent, ReasoningEffort,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -258,14 +258,14 @@ let pendingFiles: File[] = [];
 
 function getSelectedModel(): ChatConfig['model'] {
   const checked = document.querySelector<HTMLInputElement>('input[name="model"]:checked');
-  return (checked?.value ?? 'claude-sonnet-4-5') as ChatConfig['model'];
+  return (checked?.value ?? 'claude-sonnet-4-6') as ChatConfig['model'];
 }
 
 function getChatRequest(text: string): ChatRequest {
   saveModelConfig();
   const model = getSelectedModel();
   switch (model) {
-    case 'claude-sonnet-4-5':
+    case 'claude-sonnet-4-6':
     case 'claude-opus-4-6': {
       return {
         messages: anthropicHistory,
@@ -274,7 +274,7 @@ function getChatRequest(text: string): ChatRequest {
         id: currentConversation.id,
       } as ChatRequest;
     }
-    case 'gpt-5.2': {
+    case 'gpt-5.4': {
       return {
         messages: openaiHistory,
         config: { model, ...configState[model], container: openaiContainer },
@@ -290,7 +290,7 @@ function getChatRequest(text: string): ChatRequest {
         id: currentConversation.id,
       };
     }
-    case 'gemini-3-pro-preview': {
+    case 'gemini-3.1-pro-preview': {
       return {
         messages: googleHistory,
         config: { model, ...configState[model] },
@@ -307,11 +307,11 @@ function getChatRequest(text: string): ChatRequest {
 
 // --- Model config UI ---
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
-  'claude-sonnet-4-5': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
+  'claude-sonnet-4-6': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5.2': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
+  'gpt-5.4': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
-  'gemini-3-pro-preview': { image_generation: false, google_search: false, code_execution: false },
+  'gemini-3.1-pro-preview': { image_generation: false, google_search: false, code_execution: false },
 };
 
 type SavedState = { model: ChatConfig['model']; config: typeof configState };
@@ -346,17 +346,17 @@ loadSavedState();
 let currentModel: ChatConfig['model'] = getSelectedModel();
 
 function saveModelConfig() {
-  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
   }
-  if (currentModel === 'claude-sonnet-4-5' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5.2') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5.4') {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
-  if (currentModel === 'gpt-5.2') {
+  if (currentModel === 'gpt-5.4') {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
     const ci = document.getElementById('config-code-interpreter') as HTMLInputElement | null;
@@ -364,11 +364,11 @@ function saveModelConfig() {
     const re = document.getElementById('config-reasoning-effort') as HTMLSelectElement | null;
     if (re) configState[currentModel].reasoning_effort = re.value as ReasoningEffort;
   }
-  if (currentModel === 'gemini-3-pro-preview') {
+  if (currentModel === 'gemini-3.1-pro-preview') {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
   }
-  if (currentModel === 'gemini-3-flash-preview' || currentModel === 'gemini-3-pro-preview') {
+  if (currentModel === 'gemini-3-flash-preview' || currentModel === 'gemini-3.1-pro-preview') {
     const gs = document.getElementById('config-google-search') as HTMLInputElement | null;
     if (gs) configState[currentModel].google_search = gs.checked;
     const ce = document.getElementById('config-code-execution') as HTMLInputElement | null;
@@ -381,13 +381,13 @@ function renderModelConfig() {
   saveModelConfig();
   const model = getSelectedModel();
   currentModel = model;
-  if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
+  if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
-  } else if (model === 'gpt-5.2') {
+  } else if (model === 'gpt-5.4') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label>thinking <select id="config-reasoning-effort">` +
@@ -398,7 +398,7 @@ function renderModelConfig() {
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
       `<label><input type="checkbox" id="config-code-interpreter" ${config.code_interpreter ? 'checked' : ''}> code execution</label>`;
-  } else if (model === 'gemini-3-pro-preview') {
+  } else if (model === 'gemini-3.1-pro-preview') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
@@ -1264,12 +1264,12 @@ async function streamChat(request: ChatRequest, files: File[]) {
       currentConversation.turns.push(turnEvents);
       currentConversation.config = request.config;
       const model = request.config.model;
-      if (model === 'gpt-5.2') {
+      if (model === 'gpt-5.4') {
         currentConversation.history = openaiHistory;
         currentConversation.container = openaiContainer;
-      } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
+      } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
         currentConversation.history = googleHistory;
-      } else if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
+      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
         currentConversation.history = anthropicHistory;
         currentConversation.container = anthropicContainer;
       } else {
@@ -1336,19 +1336,19 @@ async function restoreConversation(id: string) {
 
   // Set provider-specific globals
   const model = conv.config.model;
-  if (model === 'gpt-5.2') {
+  if (model === 'gpt-5.4') {
     openaiHistory = conv.history as OpenAIHistory;
     openaiContainer = conv.container;
     anthropicHistory = [];
     anthropicContainer = undefined;
     googleHistory = [];
-  } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3-pro-preview') {
+  } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
     googleHistory = conv.history as GoogleHistory;
     anthropicHistory = [];
     anthropicContainer = undefined;
     openaiHistory = [];
     openaiContainer = undefined;
-  } else if (model === 'claude-sonnet-4-5' || model === 'claude-opus-4-6') {
+  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];

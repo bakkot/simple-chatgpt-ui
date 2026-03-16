@@ -57,8 +57,8 @@ export type OpenAIResponse = OpenAI.Responses.Response;
 export type OpenAIHistory = OpenAIInputItem[];
 
 // --- Config ---
-export type Sonnet45Config = {
-  model: 'claude-sonnet-4-5';
+export type Sonnet46Config = {
+  model: 'claude-sonnet-4-6';
   system?: string;
   thinking?: boolean;
   max_tokens?: number;
@@ -79,8 +79,8 @@ export type Opus46Config = {
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
-export type GPT52Config = {
-  model: 'gpt-5.2';
+export type GPT54Config = {
+  model: 'gpt-5.4';
   web_search?: boolean;
   image_generation?: boolean;
   code_interpreter?: boolean;
@@ -94,21 +94,21 @@ export type Gemini3FlashConfig = {
   code_execution?: boolean;
 };
 
-export type Gemini3ProConfig = {
-  model: 'gemini-3-pro-preview';
+export type Gemini31ProConfig = {
+  model: 'gemini-3.1-pro-preview';
   image_generation?: boolean;
   google_search?: boolean;
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet45Config | Opus46Config | GPT52Config | Gemini3FlashConfig | Gemini3ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | GPT54Config | Gemini3FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
-  | { messages: AnthropicHistory; config: Sonnet45Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Sonnet46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
-  | { messages: OpenAIHistory; config: GPT52Config; text: string, id: string }
-  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini3ProConfig; text: string, id: string };
+  | { messages: OpenAIHistory; config: GPT54Config; text: string, id: string }
+  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini31ProConfig; text: string, id: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -158,7 +158,7 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet45Config | Opus46Config,
+  config: Sonnet46Config | Opus46Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -167,7 +167,7 @@ async function streamAnthropicChat(
 
     let baseParams: { model: string; max_tokens: number; messages: AnthropicHistory; system?: string; thinking: Anthropic.ThinkingConfigParam };
     switch (config.model) {
-      case 'claude-sonnet-4-5': {
+      case 'claude-sonnet-4-6': {
         const maxTokens = config.max_tokens ?? 16384;
         baseParams = {
           model: config.model,
@@ -263,7 +263,7 @@ async function streamOpenAIChat(
   input: OpenAIHistory,
   text: string,
   files: Express.Multer.File[],
-  config: GPT52Config,
+  config: GPT54Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -337,7 +337,7 @@ async function streamGoogleChat(
   history: GoogleHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Gemini3FlashConfig | Gemini3ProConfig,
+  config: Gemini3FlashConfig | Gemini31ProConfig,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -346,7 +346,7 @@ async function streamGoogleChat(
 
     let model: string = config.model;
     let generateConfig: Record<string, unknown> | undefined;
-    if (config.model === 'gemini-3-pro-preview' && config.image_generation) {
+    if (config.model === 'gemini-3.1-pro-preview' && config.image_generation) {
       model = 'gemini-3-pro-image-preview';
       generateConfig = { responseModalities: ['TEXT', 'IMAGE'] };
     }
@@ -455,17 +455,17 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   }
 
   switch (chat.config.model) {
-    case 'claude-sonnet-4-5':
+    case 'claude-sonnet-4-6':
     case 'claude-opus-4-6': {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gpt-5.2': {
+    case 'gpt-5.4': {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
     case 'gemini-3-flash-preview':
-    case 'gemini-3-pro-preview': {
+    case 'gemini-3.1-pro-preview': {
       await streamGoogleChat(chat.messages as GoogleHistory, chat.text, files, chat.config, send);
       break;
     }
