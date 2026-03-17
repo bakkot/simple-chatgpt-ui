@@ -1107,6 +1107,49 @@ async function showHistoryDialog() {
     const actions = document.createElement('span');
     actions.className = 'history-item-actions';
 
+    const editBtn = document.createElement('button');
+    editBtn.className = 'history-item-action';
+    const pencilIcon = document.getElementById('pencil-icon')!.cloneNode(true) as HTMLElement;
+    pencilIcon.removeAttribute('style');
+    pencilIcon.removeAttribute('id');
+    editBtn.appendChild(pencilIcon);
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'history-item-preview';
+      input.value = conv.preview || '';
+      previewSpan.replaceWith(input);
+      input.focus();
+      let cancelled = false;
+      const commit = async () => {
+        if (cancelled) return;
+        const trimmed = input.value.trim();
+        if (!trimmed) {
+          input.replaceWith(previewSpan);
+          return;
+        }
+        conv.preview = trimmed;
+        previewSpan.textContent = trimmed;
+        input.replaceWith(previewSpan);
+        await saveConversation(conv);
+      };
+      input.addEventListener('keydown', (ke) => {
+        ke.stopPropagation();
+        if (ke.key === 'Enter') {
+          ke.preventDefault();
+          input.blur();
+        } else if (ke.key === 'Escape') {
+          ke.preventDefault();
+          cancelled = true;
+          input.replaceWith(previewSpan);
+        }
+      });
+      input.addEventListener('blur', commit);
+      input.addEventListener('click', (ce) => ce.stopPropagation());
+    });
+    actions.appendChild(editBtn);
+
     const bookmarkBtn = document.createElement('button');
     bookmarkBtn.className = 'history-item-action';
     bookmarkBtn.textContent = conv.bookmarked ? '\u2605' : '\u2606';
