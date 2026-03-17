@@ -1324,6 +1324,25 @@ function extractUserText(events: StreamEvent[]): string {
 async function restoreConversation(id: string) {
   const conv = await loadConversation(id);
 
+  // map old->new
+  // we'll need to handle deprecations eventually but this works for now
+  type Olds = 'claude-sonnet-4-5' | 'gpt-5.2' | 'gemini-3-pro-preview';
+  const config: { model: (typeof conv.config)['model'] | Olds } = conv.config;
+  switch (config.model) {
+    case 'claude-sonnet-4-5': {
+      config.model = 'claude-sonnet-4-6';
+      break;
+    }
+    case 'gpt-5.2': {
+      config.model = 'gpt-5.4';
+      break;
+    }
+    case 'gemini-3-pro-preview': {
+      config.model = 'gemini-3.1-pro-preview';
+      break;
+    }
+  }
+
   // Update currentConversation
   currentConversation.id = conv.id;
   currentConversation.config = conv.config;
