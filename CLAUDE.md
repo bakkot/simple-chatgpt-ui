@@ -15,6 +15,7 @@ Streaming chat UI for multiple providers.
 - Tools are per-provider. Anthropic uses beta tool types (`BetaToolUnion`); OpenAI uses `OpenAI.Responses.Tool`. Each provider's streaming function builds a tools array from config booleans and passes it to the SDK.
 - The client renders streaming events inline (text deltas, thinking, search, citations) and defers some output to the `done` event (e.g. OpenAI image generation results, which arrive as `image_generation_call` items in the final response output).
 - When adding new OpenAI streaming event types, add them to the ignored-events guard in the `case 'openai'` branch to suppress console warnings.
+- Supports client-side history in IndexedDB.
 
 ## Constraints
 
