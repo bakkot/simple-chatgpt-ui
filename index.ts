@@ -1110,10 +1110,46 @@ async function refreshHistoryList() {
   renderHistoryList();
 }
 
+function haystackFor(conv: ConversationMeta): string {
+  if (conv.preview && conv.firstMessage && conv.preview !== conv.firstMessage) {
+    return conv.preview + '  ' + conv.firstMessage;
+  }
+  return conv.preview ?? conv.firstMessage;
+}
+
 function matchesQuery(conv: ConversationMeta, terms: string[]): boolean {
   if (terms.length === 0) return true;
-  const hay = ((conv.preview ?? '') + ' ' + conv.firstMessage).toLowerCase();
+  const hay = haystackFor(conv).toLowerCase();
   return terms.every(t => hay.includes(t));
+}
+
+function renderSnippet(span: HTMLElement, haystack: string, terms: string[]) {
+  const lower = haystack.toLowerCase();
+  let idx = -1;
+  let term = '';
+  for (const t of terms) {
+    const i = lower.indexOf(t);
+    if (i >= 0 && (idx < 0 || i < idx)) { idx = i; term = t; }
+  }
+  if (idx < 0) {
+    span.textContent = haystack || '(empty)';
+    return;
+  }
+  const budget = 80;
+  const before = 10;
+  let start = Math.max(0, idx - before);
+  let end = Math.min(haystack.length, start + budget);
+  // If we hit the right edge without using full budget, reclaim by extending left.
+  if (end - start < budget && start > 0) {
+    start = Math.max(0, end - budget);
+  }
+  span.textContent = '';
+  if (start > 0) span.appendChild(document.createTextNode('\u2026'));
+  span.appendChild(document.createTextNode(haystack.slice(start, idx)));
+  const strong = document.createElement('strong');
+  strong.textContent = haystack.slice(idx, idx + term.length);
+  span.appendChild(strong);
+  span.appendChild(document.createTextNode(haystack.slice(idx + term.length, end)));
 }
 
 function renderHistoryList() {
@@ -1137,7 +1173,11 @@ function renderHistoryList() {
 
     const previewSpan = document.createElement('span');
     previewSpan.className = 'history-item-preview';
-    previewSpan.textContent = displayText() || '(empty)';
+    if (terms.length > 0) {
+      renderSnippet(previewSpan, haystackFor(conv), terms);
+    } else {
+      previewSpan.textContent = displayText() || '(empty)';
+    }
     li.appendChild(previewSpan);
 
     const meta = document.createElement('span');
