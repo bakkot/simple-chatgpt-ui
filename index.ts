@@ -17,6 +17,7 @@ const unattachLink = document.getElementById('unattach')!;
 const historyButton = document.getElementById('history-button')!;
 const historyDialog = document.getElementById('history-dialog') as HTMLDialogElement;
 const historyList = document.getElementById('history-list')!;
+const historySearchInput = document.getElementById('history-search') as HTMLInputElement;
 const historyDialogClose = document.getElementById('history-dialog-close')!;
 const userDialog = document.querySelector('dialog.user') as HTMLDialogElement;
 const userInput = userDialog.querySelector('.user-input') as HTMLInputElement;
@@ -111,7 +112,8 @@ type ConversationMeta = {
   container?: string;
   updatedAt: number;
   bookmarked: boolean;
-  preview: string;
+  preview: string | null;
+  firstMessage: string;
 };
 
 type Conversation = ConversationMeta & {
@@ -166,7 +168,8 @@ const currentConversation: Conversation = {
   turns: [],
   bookmarked: false,
   updatedAt: 0,
-  preview: '',
+  preview: null,
+  firstMessage: '',
 };
 
 async function loadConversations(): Promise<ConversationMeta[]> {
@@ -181,8 +184,8 @@ async function loadConversations(): Promise<ConversationMeta[]> {
 
 async function saveCurrentConversation(turnEvents?: StreamEvent[]): Promise<void> {
   currentConversation.updatedAt = Date.now();
-  if (turnEvents && currentConversation.turns.length === 1 && !currentConversation.preview) {
-    currentConversation.preview = extractUserText(turnEvents);
+  if (turnEvents && currentConversation.turns.length === 1 && !currentConversation.firstMessage) {
+    currentConversation.firstMessage = extractUserText(turnEvents);
   }
   const db = await openDB();
   const tx = db.transaction(['conversations', 'turns'], 'readwrite');
@@ -1074,11 +1077,49 @@ function confirmAction(message: string): Promise<boolean> {
   });
 }
 
-async function showHistoryDialog() {
-  const convs = (await loadConversations()).sort((a, b) => {
+// Legacy records may lack firstMessage and have preview as a (possibly empty) string
+// rather than nullable. Re-derive firstMessage from turn 0 and null out preview when
+// it was auto-populated (i.e. equals firstMessage).
+let migrationPromise: Promise<void> | null = null;
+function ensureMigrated(): Promise<void> {
+  if (!migrationPromise) migrationPromise = migrateConversations();
+  return migrationPromise;
+}
+
+async function migrateConversations(): Promise<void> {
+  type LegacyMeta = Omit<ConversationMeta, 'firstMessage'> & { firstMessage?: string };
+  const legacy: LegacyMeta[] = await loadConversations();
+  const toMigrate = legacy.filter(c => c.firstMessage === undefined);
+  for (const conv of toMigrate) {
+    const full = await loadConversation(conv.id);
+    const firstMessage = full.turns[0] ? extractUserText(full.turns[0]) : '';
+    const preview = conv.preview && conv.preview !== firstMessage ? conv.preview : null;
+    const migrated: ConversationMeta = { ...conv, firstMessage, preview };
+    await saveConversation(migrated);
+  }
+}
+
+let currentHistoryConvs: ConversationMeta[] = [];
+
+async function refreshHistoryList() {
+  await ensureMigrated();
+  currentHistoryConvs = (await loadConversations()).sort((a, b) => {
     if (a.bookmarked !== b.bookmarked) return a.bookmarked ? -1 : 1;
     return b.updatedAt - a.updatedAt;
   });
+  renderHistoryList();
+}
+
+function matchesQuery(conv: ConversationMeta, terms: string[]): boolean {
+  if (terms.length === 0) return true;
+  const hay = ((conv.preview ?? '') + ' ' + conv.firstMessage).toLowerCase();
+  return terms.every(t => hay.includes(t));
+}
+
+function renderHistoryList() {
+  const query = historySearchInput.value.trim().toLowerCase();
+  const terms = query ? query.split(/\s+/).filter(Boolean) : [];
+  const convs = currentHistoryConvs.filter(c => matchesQuery(c, terms));
 
   historyList.innerHTML = '';
   if (convs.length === 0) {
@@ -1086,17 +1127,17 @@ async function showHistoryDialog() {
     empty.className = 'history-item';
     empty.style.color = '#999';
     empty.style.justifyContent = 'center';
-    empty.textContent = '(empty)';
+    empty.textContent = terms.length === 0 ? '(empty)' : '(no matches)';
     historyList.appendChild(empty);
   }
   for (const conv of convs) {
-    const preview = conv.preview;
+    const displayText = () => conv.preview ?? conv.firstMessage;
     const li = document.createElement('li');
     li.className = 'history-item';
 
     const previewSpan = document.createElement('span');
     previewSpan.className = 'history-item-preview';
-    previewSpan.textContent = preview || '(empty)';
+    previewSpan.textContent = displayText() || '(empty)';
     li.appendChild(previewSpan);
 
     const meta = document.createElement('span');
@@ -1118,19 +1159,16 @@ async function showHistoryDialog() {
       const input = document.createElement('input');
       input.type = 'text';
       input.className = 'history-item-preview';
-      input.value = conv.preview || '';
+      input.value = displayText();
       previewSpan.replaceWith(input);
       input.focus();
       let cancelled = false;
       const commit = async () => {
         if (cancelled) return;
         const trimmed = input.value.trim();
-        if (!trimmed) {
-          input.replaceWith(previewSpan);
-          return;
-        }
-        conv.preview = trimmed;
-        previewSpan.textContent = trimmed;
+        // Empty or matches firstMessage → revert to auto (null preview)
+        conv.preview = !trimmed || trimmed === conv.firstMessage ? null : trimmed;
+        previewSpan.textContent = displayText() || '(empty)';
         input.replaceWith(previewSpan);
         await saveConversation(conv);
       };
@@ -1172,7 +1210,7 @@ async function showHistoryDialog() {
       e.stopPropagation();
       if (e.shiftKey || await confirmAction('Delete this conversation? This cannot be undone.<br><br>Tip: hold "shift" while clicking the trash icon to skip this confirmation.')) {
         await deleteConversation(conv.id);
-        await showHistoryDialog();
+        await refreshHistoryList();
       }
     });
     actions.appendChild(trashBtn);
@@ -1186,9 +1224,33 @@ async function showHistoryDialog() {
 
     historyList.appendChild(li);
   }
+}
 
+async function showHistoryDialog() {
+  historySearchInput.value = '';
+  await refreshHistoryList();
   historyDialog.showModal();
 }
+
+// Throttle search re-renders so typing stays snappy but doesn't thrash the list.
+let searchThrottleTimer: number | undefined;
+let searchPending = false;
+historySearchInput.addEventListener('input', () => {
+  if (searchThrottleTimer !== undefined) {
+    searchPending = true;
+    return;
+  }
+  renderHistoryList();
+  searchThrottleTimer = window.setTimeout(function tick() {
+    if (searchPending) {
+      searchPending = false;
+      renderHistoryList();
+      searchThrottleTimer = window.setTimeout(tick, 100);
+    } else {
+      searchThrottleTimer = undefined;
+    }
+  }, 100);
+});
 
 historyButton.addEventListener('click', showHistoryDialog);
 historyDialogClose.addEventListener('click', () => historyDialog.close());
@@ -1394,6 +1456,7 @@ async function restoreConversation(id: string) {
   currentConversation.turns = conv.turns;
   currentConversation.updatedAt = conv.updatedAt;
   currentConversation.preview = conv.preview;
+  currentConversation.firstMessage = conv.firstMessage;
   currentConversation.bookmarked = conv.bookmarked;
 
   // Set provider-specific globals
