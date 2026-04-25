@@ -80,7 +80,7 @@ export type Opus46Config = {
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export type GPT54Config = {
-  model: 'gpt-5.4';
+  model: 'gpt-5.5';
   web_search?: boolean;
   image_generation?: boolean;
   code_interpreter?: boolean;
@@ -460,7 +460,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gpt-5.4': {
+    case 'gpt-5.5': {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
