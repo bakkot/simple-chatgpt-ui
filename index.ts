@@ -1,8 +1,8 @@
 import type {
-  AnthropicHistory, AnthropicMessageParam,
-  OpenAIHistory, OpenAIInputItem, OpenAIResponse,
-  GoogleContent, GoogleHistory, GroundingMetadata,
-  Sonnet46Config, Opus46Config, GPT54Config, Gemini3FlashConfig, Gemini31ProConfig, ChatConfig, ChatRequest, StreamEvent, ReasoningEffort,
+  AnthropicHistory,
+  OpenAIHistory,
+  GoogleHistory,
+  GroundingMetadata, ChatConfig, ChatRequest, StreamEvent, ReasoningEffort,
 } from './run.ts';
 
 const messagesDiv = document.getElementById('messages')!;
@@ -269,7 +269,8 @@ function getChatRequest(text: string): ChatRequest {
   const model = getSelectedModel();
   switch (model) {
     case 'claude-sonnet-4-6':
-    case 'claude-opus-4-6': {
+    case 'claude-opus-4-6':
+    case 'claude-opus-4-7': {
       return {
         messages: anthropicHistory,
         config: { model, ...configState[model], container: anthropicContainer },
@@ -312,6 +313,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-6': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
+  'claude-opus-4-7': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.5': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
   'gemini-3.1-pro-preview': { image_generation: false, google_search: false, code_execution: false },
@@ -349,13 +351,13 @@ loadSavedState();
 let currentModel: ChatConfig['model'] = getSelectedModel();
 
 function saveModelConfig() {
-  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'claude-opus-4-7') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
   }
-  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'gpt-5.5') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6'|| currentModel === 'claude-opus-4-7' || currentModel === 'gpt-5.5') {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
@@ -384,7 +386,7 @@ function renderModelConfig() {
   saveModelConfig();
   const model = getSelectedModel();
   currentModel = model;
-  if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
+  if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
@@ -1414,7 +1416,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
         currentConversation.container = openaiContainer;
       } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
         currentConversation.history = googleHistory;
-      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
+      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
         currentConversation.history = anthropicHistory;
         currentConversation.container = anthropicContainer;
       } else {
@@ -1514,7 +1516,7 @@ async function restoreConversation(id: string) {
     anthropicContainer = undefined;
     openaiHistory = [];
     openaiContainer = undefined;
-  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6') {
+  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];

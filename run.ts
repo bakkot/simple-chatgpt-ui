@@ -77,9 +77,18 @@ export type Opus46Config = {
   container?: string;
 };
 
+export type Opus47Config = {
+  model: 'claude-opus-4-7';
+  thinking?: boolean;
+  web_search?: boolean;
+  web_search_max_uses?: number;
+  code_execution?: boolean;
+  container?: string;
+};
+
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
-export type GPT54Config = {
+export type GPT55Config = {
   model: 'gpt-5.5';
   web_search?: boolean;
   image_generation?: boolean;
@@ -101,13 +110,14 @@ export type Gemini31ProConfig = {
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet46Config | Opus46Config | GPT54Config | Gemini3FlashConfig | Gemini31ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | Opus47Config | GPT55Config | Gemini3FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
-  | { messages: OpenAIHistory; config: GPT54Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Opus47Config; text: string, id: string }
+  | { messages: OpenAIHistory; config: GPT55Config; text: string, id: string }
   | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini31ProConfig; text: string, id: string };
 
 // --- Stream events ---
@@ -158,7 +168,7 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet46Config | Opus46Config,
+  config: Sonnet46Config | Opus46Config | Opus47Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -180,7 +190,8 @@ async function streamAnthropicChat(
         };
         break;
       }
-      case 'claude-opus-4-6': {
+      case 'claude-opus-4-6':
+      case 'claude-opus-4-7': {
         baseParams = {
           model: config.model,
           max_tokens: 16384,
@@ -263,7 +274,7 @@ async function streamOpenAIChat(
   input: OpenAIHistory,
   text: string,
   files: Express.Multer.File[],
-  config: GPT54Config,
+  config: GPT55Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -456,7 +467,8 @@ app.post('/chat', upload.array('files'), async (req, res) => {
 
   switch (chat.config.model) {
     case 'claude-sonnet-4-6':
-    case 'claude-opus-4-6': {
+    case 'claude-opus-4-6':
+    case 'claude-opus-4-7': {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
