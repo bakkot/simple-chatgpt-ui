@@ -86,6 +86,14 @@ export type Opus47Config = {
   container?: string;
 };
 
+export type Fable5Config = {
+  model: 'claude-fable-5';
+  web_search?: boolean;
+  web_search_max_uses?: number;
+  code_execution?: boolean;
+  container?: string;
+};
+
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export type GPT55Config = {
@@ -110,13 +118,14 @@ export type Gemini31ProConfig = {
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet46Config | Opus46Config | Opus47Config | GPT55Config | Gemini3FlashConfig | Gemini31ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | Opus47Config | Fable5Config | GPT55Config | Gemini3FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus47Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Fable5Config; text: string, id: string }
   | { messages: OpenAIHistory; config: GPT55Config; text: string, id: string }
   | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini31ProConfig; text: string, id: string };
 
@@ -168,14 +177,14 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet46Config | Opus46Config | Opus47Config,
+  config: Sonnet46Config | Opus46Config | Opus47Config | Fable5Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
     const userMessage = buildAnthropicUserMessage(text, files);
     messages.push(userMessage);
 
-    let baseParams: { model: string; max_tokens: number; messages: AnthropicHistory; system?: string; thinking: Anthropic.ThinkingConfigParam };
+    let baseParams: { model: string; max_tokens: number; messages: AnthropicHistory; system?: string; thinking?: Anthropic.ThinkingConfigParam };
     switch (config.model) {
       case 'claude-sonnet-4-6': {
         const maxTokens = config.max_tokens ?? 16384;
@@ -197,6 +206,14 @@ async function streamAnthropicChat(
           max_tokens: 16384,
           messages,
           thinking: config.thinking ? { type: 'adaptive' } : { type: 'disabled' },
+        };
+        break;
+      }
+      case 'claude-fable-5': {
+        baseParams = {
+          model: config.model,
+          max_tokens: 16384,
+          messages,
         };
         break;
       }
@@ -468,7 +485,8 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   switch (chat.config.model) {
     case 'claude-sonnet-4-6':
     case 'claude-opus-4-6':
-    case 'claude-opus-4-7': {
+    case 'claude-opus-4-7':
+    case 'claude-fable-5': {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }

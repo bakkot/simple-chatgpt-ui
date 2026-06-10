@@ -270,7 +270,8 @@ function getChatRequest(text: string): ChatRequest {
   switch (model) {
     case 'claude-sonnet-4-6':
     case 'claude-opus-4-6':
-    case 'claude-opus-4-7': {
+    case 'claude-opus-4-7':
+    case 'claude-fable-5': {
       return {
         messages: anthropicHistory,
         config: { model, ...configState[model], container: anthropicContainer },
@@ -314,6 +315,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-sonnet-4-6': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-7': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
+  'claude-fable-5': { web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.5': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
   'gemini-3.1-pro-preview': { image_generation: false, google_search: false, code_execution: false },
@@ -390,6 +392,11 @@ function renderModelConfig() {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
+      `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
+      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
+  } else if (model === 'claude-fable-5') {
+    const config = configState[model];
+    modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
   } else if (model === 'gpt-5.5') {
@@ -1416,7 +1423,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
         currentConversation.container = openaiContainer;
       } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
         currentConversation.history = googleHistory;
-      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
+      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7' || model === 'claude-fable-5') {
         currentConversation.history = anthropicHistory;
         currentConversation.container = anthropicContainer;
       } else {
@@ -1516,7 +1523,7 @@ async function restoreConversation(id: string) {
     anthropicContainer = undefined;
     openaiHistory = [];
     openaiContainer = undefined;
-  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
+  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7' || model === 'claude-fable-5') {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];
