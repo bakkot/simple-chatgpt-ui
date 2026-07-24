@@ -270,7 +270,7 @@ function getChatRequest(text: string): ChatRequest {
   switch (model) {
     case 'claude-sonnet-4-6':
     case 'claude-opus-4-6':
-    case 'claude-opus-4-7':
+    case 'claude-opus-5':
     case 'claude-fable-5': {
       return {
         messages: anthropicHistory,
@@ -314,7 +314,7 @@ function getChatRequest(text: string): ChatRequest {
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-6': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
-  'claude-opus-4-7': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
+  'claude-opus-5': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-fable-5': { web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.5': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
@@ -353,13 +353,13 @@ loadSavedState();
 let currentModel: ChatConfig['model'] = getSelectedModel();
 
 function saveModelConfig() {
-  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'claude-opus-4-7') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'claude-opus-5') {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
   }
-  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6'|| currentModel === 'claude-opus-4-7' || currentModel === 'gpt-5.5') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6'|| currentModel === 'claude-opus-5' || currentModel === 'gpt-5.5') {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
@@ -388,7 +388,7 @@ function renderModelConfig() {
   saveModelConfig();
   const model = getSelectedModel();
   currentModel = model;
-  if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7') {
+  if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-5') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
@@ -1423,7 +1423,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
         currentConversation.container = openaiContainer;
       } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
         currentConversation.history = googleHistory;
-      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7' || model === 'claude-fable-5') {
+      } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-5' || model === 'claude-fable-5') {
         currentConversation.history = anthropicHistory;
         currentConversation.container = anthropicContainer;
       } else {
@@ -1480,11 +1480,15 @@ async function restoreConversation(id: string) {
 
   // map old->new
   // we'll need to handle deprecations eventually but this works for now
-  type Olds = 'claude-sonnet-4-5' | 'gpt-5.2' | 'gpt-5.4' | 'gemini-3-pro-preview';
+  type Olds = 'claude-sonnet-4-5' | 'claude-opus-4-7' | 'gpt-5.2' | 'gpt-5.4' | 'gemini-3-pro-preview';
   const config: { model: (typeof conv.config)['model'] | Olds } = conv.config;
   switch (config.model) {
     case 'claude-sonnet-4-5': {
       config.model = 'claude-sonnet-4-6';
+      break;
+    }
+    case 'claude-opus-4-7': {
+      config.model = 'claude-opus-5';
       break;
     }
     case 'gpt-5.4':
@@ -1523,7 +1527,7 @@ async function restoreConversation(id: string) {
     anthropicContainer = undefined;
     openaiHistory = [];
     openaiContainer = undefined;
-  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-4-7' || model === 'claude-fable-5') {
+  } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-5' || model === 'claude-fable-5') {
     anthropicHistory = conv.history as AnthropicHistory;
     anthropicContainer = conv.container;
     openaiHistory = [];

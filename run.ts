@@ -77,8 +77,8 @@ export type Opus46Config = {
   container?: string;
 };
 
-export type Opus47Config = {
-  model: 'claude-opus-4-7';
+export type Opus5Config = {
+  model: 'claude-opus-5';
   thinking?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
@@ -118,13 +118,13 @@ export type Gemini31ProConfig = {
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet46Config | Opus46Config | Opus47Config | Fable5Config | GPT55Config | Gemini3FlashConfig | Gemini31ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | GPT55Config | Gemini3FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
   | { messages: AnthropicHistory; config: Sonnet46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
-  | { messages: AnthropicHistory; config: Opus47Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Opus5Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Fable5Config; text: string, id: string }
   | { messages: OpenAIHistory; config: GPT55Config; text: string, id: string }
   | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini31ProConfig; text: string, id: string };
@@ -177,7 +177,7 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet46Config | Opus46Config | Opus47Config | Fable5Config,
+  config: Sonnet46Config | Opus46Config | Opus5Config | Fable5Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -200,7 +200,7 @@ async function streamAnthropicChat(
         break;
       }
       case 'claude-opus-4-6':
-      case 'claude-opus-4-7': {
+      case 'claude-opus-5': {
         baseParams = {
           model: config.model,
           max_tokens: 16384,
@@ -485,7 +485,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
   switch (chat.config.model) {
     case 'claude-sonnet-4-6':
     case 'claude-opus-4-6':
-    case 'claude-opus-4-7':
+    case 'claude-opus-5':
     case 'claude-fable-5': {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
