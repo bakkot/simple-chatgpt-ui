@@ -105,8 +105,8 @@ export type GPT56Config = {
   reasoning_effort?: ReasoningEffort;
 };
 
-export type Gemini3FlashConfig = {
-  model: 'gemini-3-flash-preview';
+export type Gemini36FlashConfig = {
+  model: 'gemini-3.6-flash';
   google_search?: boolean;
   code_execution?: boolean;
 };
@@ -118,7 +118,7 @@ export type Gemini31ProConfig = {
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | GPT56Config | Gemini3FlashConfig | Gemini31ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | GPT56Config | Gemini36FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
@@ -127,7 +127,7 @@ export type ChatRequest =
   | { messages: AnthropicHistory; config: Opus5Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Fable5Config; text: string, id: string }
   | { messages: OpenAIHistory; config: GPT56Config; text: string, id: string }
-  | { messages: GoogleHistory; config: Gemini3FlashConfig | Gemini31ProConfig; text: string, id: string };
+  | { messages: GoogleHistory; config: Gemini36FlashConfig | Gemini31ProConfig; text: string, id: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -365,7 +365,7 @@ async function streamGoogleChat(
   history: GoogleHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Gemini3FlashConfig | Gemini31ProConfig,
+  config: Gemini36FlashConfig | Gemini31ProConfig,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -494,7 +494,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gemini-3-flash-preview':
+    case 'gemini-3.6-flash':
     case 'gemini-3.1-pro-preview': {
       await streamGoogleChat(chat.messages as GoogleHistory, chat.text, files, chat.config, send);
       break;

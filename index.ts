@@ -287,7 +287,7 @@ function getChatRequest(text: string): ChatRequest {
         id: currentConversation.id,
       };
     }
-    case 'gemini-3-flash-preview': {
+    case 'gemini-3.6-flash': {
       return {
         messages: googleHistory,
         config: { model },
@@ -317,7 +317,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-opus-5': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-fable-5': { web_search: false, web_search_max_uses: 10, code_execution: false },
   'gpt-5.6-sol': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
-  'gemini-3-flash-preview': { google_search: false, code_execution: false },
+  'gemini-3.6-flash': { google_search: false, code_execution: false },
   'gemini-3.1-pro-preview': { image_generation: false, google_search: false, code_execution: false },
 };
 
@@ -375,7 +375,7 @@ function saveModelConfig() {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
   }
-  if (currentModel === 'gemini-3-flash-preview' || currentModel === 'gemini-3.1-pro-preview') {
+  if (currentModel === 'gemini-3.6-flash' || currentModel === 'gemini-3.1-pro-preview') {
     const gs = document.getElementById('config-google-search') as HTMLInputElement | null;
     if (gs) configState[currentModel].google_search = gs.checked;
     const ce = document.getElementById('config-code-execution') as HTMLInputElement | null;
@@ -416,7 +416,7 @@ function renderModelConfig() {
       `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="config-image-generation" ${config.image_generation ? 'checked' : ''}> image generation</label>` +
       `<label><input type="checkbox" id="config-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
-  } else if (model === 'gemini-3-flash-preview') {
+  } else if (model === 'gemini-3.6-flash') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-google-search" ${config.google_search ? 'checked' : ''}> web search</label>` +
@@ -1421,7 +1421,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
       if (model === 'gpt-5.6-sol') {
         currentConversation.history = openaiHistory;
         currentConversation.container = openaiContainer;
-      } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
+      } else if (model === 'gemini-3.6-flash' || model === 'gemini-3.1-pro-preview') {
         currentConversation.history = googleHistory;
       } else if (model === 'claude-sonnet-4-6' || model === 'claude-opus-4-6' || model === 'claude-opus-5' || model === 'claude-fable-5') {
         currentConversation.history = anthropicHistory;
@@ -1480,7 +1480,7 @@ async function restoreConversation(id: string) {
 
   // map old->new
   // we'll need to handle deprecations eventually but this works for now
-  type Olds = 'claude-sonnet-4-5' | 'claude-opus-4-7' | 'gpt-5.2' | 'gpt-5.4' | 'gpt-5.5' | 'gemini-3-pro-preview';
+  type Olds = 'claude-sonnet-4-5' | 'claude-opus-4-7' | 'gpt-5.2' | 'gpt-5.4' | 'gpt-5.5' | 'gemini-3-pro-preview' | 'gemini-3-flash-preview';
   const config: { model: (typeof conv.config)['model'] | Olds } = conv.config;
   switch (config.model) {
     case 'claude-sonnet-4-5': {
@@ -1499,6 +1499,10 @@ async function restoreConversation(id: string) {
     }
     case 'gemini-3-pro-preview': {
       config.model = 'gemini-3.1-pro-preview';
+      break;
+    }
+    case 'gemini-3-flash-preview': {
+      config.model = 'gemini-3.6-flash';
       break;
     }
   }
@@ -1522,7 +1526,7 @@ async function restoreConversation(id: string) {
     anthropicHistory = [];
     anthropicContainer = undefined;
     googleHistory = [];
-  } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
+  } else if (model === 'gemini-3.6-flash' || model === 'gemini-3.1-pro-preview') {
     googleHistory = conv.history as GoogleHistory;
     anthropicHistory = [];
     anthropicContainer = undefined;
