@@ -279,7 +279,7 @@ function getChatRequest(text: string): ChatRequest {
         id: currentConversation.id,
       } as ChatRequest;
     }
-    case 'gpt-5.5': {
+    case 'gpt-5.6-sol': {
       return {
         messages: openaiHistory,
         config: { model, ...configState[model], container: openaiContainer },
@@ -316,7 +316,7 @@ const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { mode
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-5': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-fable-5': { web_search: false, web_search_max_uses: 10, code_execution: false },
-  'gpt-5.5': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
+  'gpt-5.6-sol': { web_search: false, image_generation: false, code_interpreter: false, reasoning_effort: 'none' as const },
   'gemini-3-flash-preview': { google_search: false, code_execution: false },
   'gemini-3.1-pro-preview': { image_generation: false, google_search: false, code_execution: false },
 };
@@ -359,11 +359,11 @@ function saveModelConfig() {
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
   }
-  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6'|| currentModel === 'claude-opus-5' || currentModel === 'gpt-5.5') {
+  if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6'|| currentModel === 'claude-opus-5' || currentModel === 'gpt-5.6-sol') {
     const ws = document.getElementById('config-web-search') as HTMLInputElement | null;
     if (ws) configState[currentModel].web_search = ws.checked;
   }
-  if (currentModel === 'gpt-5.5') {
+  if (currentModel === 'gpt-5.6-sol') {
     const ig = document.getElementById('config-image-generation') as HTMLInputElement | null;
     if (ig) configState[currentModel].image_generation = ig.checked;
     const ci = document.getElementById('config-code-interpreter') as HTMLInputElement | null;
@@ -399,7 +399,7 @@ function renderModelConfig() {
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
       `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
-  } else if (model === 'gpt-5.5') {
+  } else if (model === 'gpt-5.6-sol') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label>thinking <select id="config-reasoning-effort">` +
@@ -1418,7 +1418,7 @@ async function streamChat(request: ChatRequest, files: File[]) {
       currentConversation.turns.push(turnEvents);
       currentConversation.config = request.config;
       const model = request.config.model;
-      if (model === 'gpt-5.5') {
+      if (model === 'gpt-5.6-sol') {
         currentConversation.history = openaiHistory;
         currentConversation.container = openaiContainer;
       } else if (model === 'gemini-3-flash-preview' || model === 'gemini-3.1-pro-preview') {
@@ -1480,7 +1480,7 @@ async function restoreConversation(id: string) {
 
   // map old->new
   // we'll need to handle deprecations eventually but this works for now
-  type Olds = 'claude-sonnet-4-5' | 'claude-opus-4-7' | 'gpt-5.2' | 'gpt-5.4' | 'gemini-3-pro-preview';
+  type Olds = 'claude-sonnet-4-5' | 'claude-opus-4-7' | 'gpt-5.2' | 'gpt-5.4' | 'gpt-5.5' | 'gemini-3-pro-preview';
   const config: { model: (typeof conv.config)['model'] | Olds } = conv.config;
   switch (config.model) {
     case 'claude-sonnet-4-5': {
@@ -1491,9 +1491,10 @@ async function restoreConversation(id: string) {
       config.model = 'claude-opus-5';
       break;
     }
+    case 'gpt-5.5':
     case 'gpt-5.4':
     case 'gpt-5.2': {
-      config.model = 'gpt-5.5';
+      config.model = 'gpt-5.6-sol';
       break;
     }
     case 'gemini-3-pro-preview': {
@@ -1515,7 +1516,7 @@ async function restoreConversation(id: string) {
 
   // Set provider-specific globals
   const model = conv.config.model;
-  if (model === 'gpt-5.5') {
+  if (model === 'gpt-5.6-sol') {
     openaiHistory = conv.history as OpenAIHistory;
     openaiContainer = conv.container;
     anthropicHistory = [];
