@@ -94,6 +94,14 @@ export type Fable5Config = {
   container?: string;
 };
 
+export type Fable51Config = {
+  model: 'claude-fable-5-1';
+  web_search?: boolean;
+  web_search_max_uses?: number;
+  code_execution?: boolean;
+  container?: string;
+};
+
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export type GPT56Config = {
@@ -105,8 +113,8 @@ export type GPT56Config = {
   reasoning_effort?: ReasoningEffort;
 };
 
-export type Gemini36FlashConfig = {
-  model: 'gemini-3.6-flash';
+export type Gemini38FlashConfig = {
+  model: 'gemini-3.8-flash';
   google_search?: boolean;
   code_execution?: boolean;
 };
@@ -118,7 +126,7 @@ export type Gemini31ProConfig = {
   code_execution?: boolean;
 };
 
-export type ChatConfig = Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | GPT56Config | Gemini36FlashConfig | Gemini31ProConfig;
+export type ChatConfig = Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | Fable51Config | GPT56Config | Gemini38FlashConfig | Gemini31ProConfig;
 
 // --- Request type ---
 export type ChatRequest =
@@ -126,8 +134,9 @@ export type ChatRequest =
   | { messages: AnthropicHistory; config: Opus46Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Opus5Config; text: string, id: string }
   | { messages: AnthropicHistory; config: Fable5Config; text: string, id: string }
+  | { messages: AnthropicHistory; config: Fable51Config; text: string, id: string }
   | { messages: OpenAIHistory; config: GPT56Config; text: string, id: string }
-  | { messages: GoogleHistory; config: Gemini36FlashConfig | Gemini31ProConfig; text: string, id: string };
+  | { messages: GoogleHistory; config: Gemini38FlashConfig | Gemini31ProConfig; text: string, id: string };
 
 // --- Stream events ---
 export type AnthropicEvent = { type: 'anthropic'; event: AnthropicStreamEvent };
@@ -177,7 +186,7 @@ async function streamAnthropicChat(
   messages: AnthropicHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Sonnet46Config | Opus46Config | Opus5Config | Fable5Config,
+  config: Sonnet46Config | Opus46Config | Opus5Config | Fable5Config | Fable51Config,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -209,7 +218,8 @@ async function streamAnthropicChat(
         };
         break;
       }
-      case 'claude-fable-5': {
+      case 'claude-fable-5':
+      case 'claude-fable-5-1': {
         baseParams = {
           model: config.model,
           max_tokens: 16384,
@@ -365,7 +375,7 @@ async function streamGoogleChat(
   history: GoogleHistory,
   text: string,
   files: Express.Multer.File[],
-  config: Gemini36FlashConfig | Gemini31ProConfig,
+  config: Gemini38FlashConfig | Gemini31ProConfig,
   send: (event: StreamEvent) => void,
 ): Promise<void> {
   try {
@@ -486,7 +496,8 @@ app.post('/chat', upload.array('files'), async (req, res) => {
     case 'claude-sonnet-4-6':
     case 'claude-opus-4-6':
     case 'claude-opus-5':
-    case 'claude-fable-5': {
+    case 'claude-fable-5':
+    case 'claude-fable-5-1': {
       await streamAnthropicChat(chat.messages as AnthropicHistory, chat.text, files, chat.config, send);
       break;
     }
@@ -494,7 +505,7 @@ app.post('/chat', upload.array('files'), async (req, res) => {
       await streamOpenAIChat(chat.messages as OpenAIHistory, chat.text, files, chat.config, send);
       break;
     }
-    case 'gemini-3.6-flash':
+    case 'gemini-3.8-flash':
     case 'gemini-3.1-pro-preview': {
       await streamGoogleChat(chat.messages as GoogleHistory, chat.text, files, chat.config, send);
       break;
