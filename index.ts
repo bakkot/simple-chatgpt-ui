@@ -275,7 +275,7 @@ function getChatRequest(text: string): ChatRequest {
     case 'claude-fable-5-1': {
       return {
         messages: anthropicHistory,
-        config: { model, ...configState[model], container: anthropicContainer },
+        config: { model, ...configState[model], container: anthropicContainer, prompt_caching: promptCaching },
         text,
         id: currentConversation.id,
       } as ChatRequest;
@@ -312,6 +312,10 @@ function getChatRequest(text: string): ChatRequest {
 }
 
 // --- Model config UI ---
+// Deliberately not part of configState: prompt caching is not persisted, and
+// defaults back to on every load.
+let promptCaching = true;
+
 const configState: { [K in ChatConfig['model']]: Omit<Extract<ChatConfig, { model: K }>, 'model'> } = {
   'claude-sonnet-4-6': { thinking: true, max_tokens: 16384, web_search: false, web_search_max_uses: 10, code_execution: false },
   'claude-opus-4-6': { thinking: true, web_search: false, web_search_max_uses: 10, code_execution: false },
@@ -359,6 +363,10 @@ function saveModelConfig() {
     const cb = document.getElementById('anthropic-thinking') as HTMLInputElement | null;
     if (cb) configState[currentModel].thinking = cb.checked;
   }
+  {
+    const pc = document.getElementById('anthropic-prompt-caching') as HTMLInputElement | null;
+    if (pc) promptCaching = pc.checked;
+  }
   if (currentModel === 'claude-sonnet-4-6' || currentModel === 'claude-opus-4-6' || currentModel === 'claude-opus-5' || currentModel === 'claude-fable-5' || currentModel === 'claude-fable-5-1') {
     const ce = document.getElementById('anthropic-code-execution') as HTMLInputElement | null;
     if (ce) configState[currentModel].code_execution = ce.checked;
@@ -397,12 +405,14 @@ function renderModelConfig() {
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="anthropic-thinking" ${config.thinking ? 'checked' : ''}> thinking</label>` +
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
-      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
+      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>` +
+      `<label><input type="checkbox" id="anthropic-prompt-caching" ${promptCaching ? 'checked' : ''}> prompt caching (disable for single-turn)</label>`;
   } else if (model === 'claude-fable-5' || model === 'claude-fable-5-1') {
     const config = configState[model];
     modelConfigDiv.innerHTML =
       `<label><input type="checkbox" id="config-web-search" ${config.web_search ? 'checked' : ''}> web search</label>` +
-      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>`;
+      `<label><input type="checkbox" id="anthropic-code-execution" ${config.code_execution ? 'checked' : ''}> code execution</label>` +
+      `<label><input type="checkbox" id="anthropic-prompt-caching" ${promptCaching ? 'checked' : ''}> prompt caching (disable for single-turn)</label>`;
   } else if (model === 'gpt-5.6-sol') {
     const config = configState[model];
     modelConfigDiv.innerHTML =

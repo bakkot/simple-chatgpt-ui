@@ -59,6 +59,7 @@ export type OpenAIHistory = OpenAIInputItem[];
 // --- Config ---
 export type Sonnet46Config = {
   model: 'claude-sonnet-4-6';
+  prompt_caching?: boolean;
   system?: string;
   thinking?: boolean;
   max_tokens?: number;
@@ -70,6 +71,7 @@ export type Sonnet46Config = {
 
 export type Opus46Config = {
   model: 'claude-opus-4-6';
+  prompt_caching?: boolean;
   thinking?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
@@ -79,6 +81,7 @@ export type Opus46Config = {
 
 export type Opus5Config = {
   model: 'claude-opus-5';
+  prompt_caching?: boolean;
   thinking?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
@@ -88,6 +91,7 @@ export type Opus5Config = {
 
 export type Fable5Config = {
   model: 'claude-fable-5';
+  prompt_caching?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
   code_execution?: boolean;
@@ -96,6 +100,7 @@ export type Fable5Config = {
 
 export type Fable51Config = {
   model: 'claude-fable-5-1';
+  prompt_caching?: boolean;
   web_search?: boolean;
   web_search_max_uses?: number;
   code_execution?: boolean;
@@ -244,12 +249,20 @@ async function streamAnthropicChat(
     // Always use the beta API — it's a superset of the regular API and accepts
     // the wider AnthropicHistory type (which may contain beta content blocks
     // from previous code execution responses).
-    const stream = anthropic.beta.messages.stream({
+    // The installed SDK's params type predates top-level automatic caching, so
+    // widen it here rather than dropping the field.
+    type StreamParams = Parameters<typeof anthropic.beta.messages.stream>[0]
+      & { cache_control?: Anthropic.Beta.BetaCacheControlEphemeral };
+    const params: StreamParams = {
       ...baseParams,
       tools: tools.length > 0 ? tools : undefined,
       betas: config.code_execution ? ['code-execution-2025-08-25'] : undefined,
       container: config.container ?? undefined,
-    });
+      // Automatic caching: the API puts the breakpoint on the last cacheable
+      // block and moves it forward as the conversation grows.
+      cache_control: config.prompt_caching ? { type: 'ephemeral' } : undefined,
+    };
+    const stream = anthropic.beta.messages.stream(params);
 
     for await (const event of stream) {
       send({ type: 'anthropic', event });
